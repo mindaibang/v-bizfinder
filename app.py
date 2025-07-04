@@ -200,7 +200,7 @@ def tra_cuu_tab():
 def quan_ly_user_tab():
     st.header("👑 Quản lý người dùng")
     users = load_users()
-    st.subheader("📋 Danh sách user")
+    st.subheader(f"📋 Danh sách user (👥 Tổng: {len(users)})")
     st.table(pd.DataFrame(list(users.keys()), columns=["Tên đăng nhập"]))
 
     st.subheader("➕ Thêm user mới")
@@ -223,6 +223,17 @@ def quan_ly_user_tab():
         users[target_user] = hashed_pw
         save_json_file(USERS_FILE, users)
         st.success(f"✅ Đã đổi mật khẩu cho {target_user}")
+
+    st.subheader("🗑 Xoá user")
+    user_to_delete = st.selectbox("Chọn user để xoá", [u for u in users.keys() if u != "admin"])
+    if st.button("Xoá user"):
+        if user_to_delete == "admin":
+            st.warning("⚠️ Không thể xoá user admin")
+        else:
+            users.pop(user_to_delete)
+            save_json_file(USERS_FILE, users)
+            st.success(f"✅ Đã xoá user {user_to_delete}")
+            st.rerun()
 
 # ==============================
 # MAIN APP
@@ -247,3 +258,4 @@ if "logged_in" not in st.session_state:
     show_login()
 else:
     main_app()
+
