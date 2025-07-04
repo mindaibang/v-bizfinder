@@ -128,7 +128,7 @@ def fetch_detail(link):
             if "fa-hashtag" in cls:
                 content_lines.append(f"**Mã số thuế:** {text.replace('Mã số thuế:', '').strip()}")
             elif "fa-map-marker" in cls:
-                content_lines.append(f"**Địa chỉ thuế:** {text.replace('Địa chỉ thuế:', '').strip()}")
+                content_lines.append(f"**Địa chỉ thuế:** {text.replace('Địa chỉ:', '').strip()}")
             elif "fa-user-o" in cls:
                 a = li.find("a")
                 if a:
@@ -197,6 +197,44 @@ def tra_cuu_tab():
                 detail = fetch_detail(selected_row["Link"])
                 st.markdown(detail)
 
+                if st.button("➕ Thêm vào danh sách theo dõi"):
+                    watchlist = load_json_file(WATCHLIST_FILE)
+                    if any(item["Mã số thuế"] == selected_row["Mã số thuế"] for item in watchlist):
+                        st.info("Doanh nghiệp đã có trong danh sách theo dõi")
+                    else:
+                        watchlist.append(selected_row.to_dict())
+                        save_json_file(WATCHLIST_FILE, watchlist)
+                        st.success("✅ Đã thêm vào danh sách theo dõi")
+
+def theo_doi_tab():
+    st.header("👁️ Theo dõi doanh nghiệp")
+    watchlist = load_json_file(WATCHLIST_FILE)
+
+    if watchlist:
+        df_watch = pd.DataFrame(watchlist)
+        selected = st.selectbox("🔗 Chọn doanh nghiệp để xem chi tiết", df_watch["Tên doanh nghiệp"])
+        selected_row = df_watch[df_watch["Tên doanh nghiệp"] == selected].iloc[0]
+        detail = fetch_detail(selected_row["Link"])
+        st.markdown(detail)
+
+        note = st.text_area("📝 Ghi chú", value=selected_row.get("Ghi chú", ""))
+        if st.button("💾 Lưu ghi chú"):
+            for i, item in enumerate(watchlist):
+                if item["Mã số thuế"] == selected_row["Mã số thuế"]:
+                    watchlist[i]["Ghi chú"] = note
+            save_json_file(WATCHLIST_FILE, watchlist)
+            st.success("✅ Đã lưu ghi chú")
+
+        if st.button("🗑️ Xoá doanh nghiệp này"):
+            watchlist = [item for item in watchlist if item["Mã số thuế"] != selected_row["Mã số thuế"]]
+            save_json_file(WATCHLIST_FILE, watchlist)
+            st.success("✅ Đã xoá khỏi danh sách")
+            st.rerun()
+
+        st.download_button("💾 Tải Excel", df_watch.to_csv(index=False).encode("utf-8"), "theo_doi.csv")
+    else:
+        st.info("📭 Danh sách theo dõi trống")
+
 def quan_ly_user_tab():
     st.header("👑 Quản lý người dùng")
     users = load_users()
@@ -239,14 +277,17 @@ def quan_ly_user_tab():
 # MAIN APP
 def main_app():
     st.sidebar.title(f"Xin chào, {st.session_state['username']}")
+    pages = ["Tra cứu doanh nghiệp", "Theo dõi doanh nghiệp"]
     if st.session_state["username"] == "admin":
-        page = st.sidebar.radio("📂 Menu", ["Tra cứu doanh nghiệp", "Quản lý người dùng"])
-        if page == "Tra cứu doanh nghiệp":
-            tra_cuu_tab()
-        elif page == "Quản lý người dùng":
-            quan_ly_user_tab()
-    else:
+        pages.append("Quản lý người dùng")
+    page = st.sidebar.radio("📂 Menu", pages)
+
+    if page == "Tra cứu doanh nghiệp":
         tra_cuu_tab()
+    elif page == "Theo dõi doanh nghiệp":
+        theo_doi_tab()
+    elif page == "Quản lý người dùng":
+        quan_ly_user_tab()
 
     if st.sidebar.button("🚪 Đăng xuất"):
         st.session_state.clear()
@@ -258,4 +299,5 @@ if "logged_in" not in st.session_state:
     show_login()
 else:
     main_app()
+
 
