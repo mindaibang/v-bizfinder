@@ -33,13 +33,33 @@ USERS_FILE = "users.json"
 WATCHLIST_FILE = "watchlist.json"
 HISTORY_FILE = "history.json"
 
+import streamlit as st
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+import bcrypt
+import json
+import os
+from concurrent.futures import ThreadPoolExecutor
+
+# ==============================
+# CONFIG
+BASE_URL = "https://hsctvn.com"
+PROVINCES = {
+    "An Giang": "an-giang", "Bắc Ninh": "bac-ninh", "Bình Dương": "binh-duong",
+    "Đà Nẵng": "da-nang", "Hà Nội": "ha-noi", "TP. Hồ Chí Minh": "ho-chi-minh"
+    # ... thêm các tỉnh khác
+}
+USERS_FILE = "users.json"
+WATCHLIST_FILE = "watchlist.json"
+HISTORY_FILE = "history.json"
+
 # ==============================
 # AUTHENTICATION
 def load_users():
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    # Nếu chưa có file thì tạo user admin mặc định
     admin_hash = bcrypt.hashpw("123456".encode(), bcrypt.gensalt()).decode()
     users = {"admin": admin_hash}
     save_json_file(USERS_FILE, users)
@@ -140,10 +160,10 @@ def show_login():
 
 def tra_cuu_tab():
     st.header("📊 Tra cứu doanh nghiệp")
-    start_month = st.selectbox("Từ tháng", [f"{i:02d}" for i in range(1, 13)], key="start_month")
-    start_year = st.selectbox("Từ năm", [str(y) for y in range(2020, 2031)], key="start_year")
-    end_month = st.selectbox("Đến tháng", [f"{i:02d}" for i in range(1, 13)], key="end_month")
-    end_year = st.selectbox("Đến năm", [str(y) for y in range(2020, 2031)], key="end_year")
+    start_month = st.selectbox("Từ tháng", [f"{i:02d}" for i in range(1, 13)])
+    start_year = st.selectbox("Từ năm", [str(y) for y in range(2020, 2031)])
+    end_month = st.selectbox("Đến tháng", [f"{i:02d}" for i in range(1, 13)])
+    end_year = st.selectbox("Đến năm", [str(y) for y in range(2020, 2031)])
 
     provinces = st.multiselect("Chọn tỉnh/TP", list(PROVINCES.keys()), help="Chỉ chọn tối đa 2 tỉnh")
     if len(provinces) > 2:
@@ -177,69 +197,46 @@ def tra_cuu_tab():
                 detail = fetch_detail(selected_row["Link"])
                 st.markdown(detail)
 
-                if st.button("➕ Thêm vào danh sách theo dõi"):
-                    watchlist = load_json_file(WATCHLIST_FILE)
-                    if any(item["Mã số thuế"] == selected_row["Mã số thuế"] for item in watchlist):
-                        st.info("Doanh nghiệp đã có trong danh sách theo dõi")
-                    else:
-                        watchlist.append(selected_row.to_dict())
-                        save_json_file(WATCHLIST_FILE, watchlist)
-                        st.success("✅ Đã thêm vào danh sách theo dõi")
+def quan_ly_user_tab():
+    st.header("👑 Quản lý người dùng")
+    users = load_users()
+    st.subheader("📋 Danh sách user")
+    st.table(pd.DataFrame(list(users.keys()), columns=["Tên đăng nhập"]))
 
-                history = load_json_file(HISTORY_FILE)
-                entry = {"from": (start_month, start_year), "to": (end_month, end_year), "provinces": provinces}
-                history.insert(0, entry)
-                save_json_file(HISTORY_FILE, history)
+    st.subheader("➕ Thêm user mới")
+    new_user = st.text_input("Tên đăng nhập mới")
+    new_pass = st.text_input("Mật khẩu mới", type="password")
+    if st.button("Thêm user"):
+        if new_user in users:
+            st.warning("⚠️ User đã tồn tại")
+        else:
+            hashed_pw = bcrypt.hashpw(new_pass.encode(), bcrypt.gensalt()).decode()
+            users[new_user] = hashed_pw
+            save_json_file(USERS_FILE, users)
+            st.success(f"✅ Đã thêm user {new_user}")
 
-                st.download_button("💾 Tải Excel", final_df.to_csv(index=False).encode("utf-8"), "tra_cuu.csv")
-            else:
-                st.info("❌ Không tìm thấy doanh nghiệp")
-
-    # Lịch sử tra cứu
-    history = load_json_file(HISTORY_FILE)
-    if history:
-        st.markdown("### 📖 Lịch sử tra cứu")
-        for i, entry in enumerate(history[:5]):
-            st.write(f"{i+1}. {entry['from'][0]}/{entry['from'][1]} → {entry['to'][0]}/{entry['to'][1]} - {', '.join(entry['provinces'])}")
-
-def theo_doi_tab():
-    st.header("👁️ Theo dõi doanh nghiệp")
-    watchlist = load_json_file(WATCHLIST_FILE)
-
-    if watchlist:
-        df_watch = pd.DataFrame(watchlist)
-        selected = st.selectbox("🔗 Chọn doanh nghiệp để xem chi tiết", df_watch["Tên doanh nghiệp"])
-        selected_row = df_watch[df_watch["Tên doanh nghiệp"] == selected].iloc[0]
-        detail = fetch_detail(selected_row["Link"])
-        st.markdown(detail)
-
-        note = st.text_area("📝 Ghi chú", value=selected_row.get("Ghi chú", ""))
-        if st.button("💾 Lưu ghi chú"):
-            for i, item in enumerate(watchlist):
-                if item["Mã số thuế"] == selected_row["Mã số thuế"]:
-                    watchlist[i]["Ghi chú"] = note
-            save_json_file(WATCHLIST_FILE, watchlist)
-            st.success("✅ Đã lưu ghi chú")
-
-        if st.button("🗑️ Xoá doanh nghiệp này"):
-            watchlist = [item for item in watchlist if item["Mã số thuế"] != selected_row["Mã số thuế"]]
-            save_json_file(WATCHLIST_FILE, watchlist)
-            st.success("✅ Đã xoá khỏi danh sách")
-            st.rerun()
-
-        st.download_button("💾 Tải Excel", df_watch.to_csv(index=False).encode("utf-8"), "theo_doi.csv")
-    else:
-        st.info("📭 Danh sách theo dõi trống")
+    st.subheader("🔑 Đổi mật khẩu")
+    target_user = st.selectbox("Chọn user", list(users.keys()))
+    new_pass2 = st.text_input("Mật khẩu mới cho user", type="password")
+    if st.button("Đổi mật khẩu"):
+        hashed_pw = bcrypt.hashpw(new_pass2.encode(), bcrypt.gensalt()).decode()
+        users[target_user] = hashed_pw
+        save_json_file(USERS_FILE, users)
+        st.success(f"✅ Đã đổi mật khẩu cho {target_user}")
 
 # ==============================
 # MAIN APP
 def main_app():
     st.sidebar.title(f"Xin chào, {st.session_state['username']}")
-    page = st.sidebar.radio("📂 Menu", ["Tra cứu doanh nghiệp", "Theo dõi doanh nghiệp"])
-    if page == "Tra cứu doanh nghiệp":
+    if st.session_state["username"] == "admin":
+        page = st.sidebar.radio("📂 Menu", ["Tra cứu doanh nghiệp", "Quản lý người dùng"])
+        if page == "Tra cứu doanh nghiệp":
+            tra_cuu_tab()
+        elif page == "Quản lý người dùng":
+            quan_ly_user_tab()
+    else:
         tra_cuu_tab()
-    elif page == "Theo dõi doanh nghiệp":
-        theo_doi_tab()
+
     if st.sidebar.button("🚪 Đăng xuất"):
         st.session_state.clear()
         st.rerun()
