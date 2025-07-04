@@ -11,9 +11,23 @@ from concurrent.futures import ThreadPoolExecutor
 # CONFIG
 BASE_URL = "https://hsctvn.com"
 PROVINCES = {
-    "Hà Nội": "ha-noi", "Hồ Chí Minh": "ho-chi-minh", "Đà Nẵng": "da-nang",
-    "Bình Dương": "binh-duong", "Bắc Ninh": "bac-ninh", "Hải Phòng": "hai-phong"
-    # ... thêm các tỉnh khác như app gốc
+    "An Giang": "an-giang", "Bà Rịa - Vũng Tàu": "ba-ria-vung-tau", "Bạc Liêu": "bac-lieu",
+    "Bắc Giang": "bac-giang", "Bắc Kạn": "bac-kan", "Bắc Ninh": "bac-ninh", "Bến Tre": "ben-tre",
+    "Bình Dương": "binh-duong", "Bình Định": "binh-dinh", "Bình Phước": "binh-phuoc",
+    "Bình Thuận": "binh-thuan", "Cà Mau": "ca-mau", "Cần Thơ": "can-tho", "Cao Bằng": "cao-bang",
+    "Đà Nẵng": "da-nang", "Đắk Lắk": "dak-lak", "Đắk Nông": "dak-nong", "Điện Biên": "dien-bien",
+    "Đồng Nai": "dong-nai", "Đồng Tháp": "dong-thap", "Gia Lai": "gia-lai", "Hà Giang": "ha-giang",
+    "Hà Nam": "ha-nam", "Hà Nội": "ha-noi", "Hà Tĩnh": "ha-tinh", "Hải Dương": "hai-duong",
+    "Hải Phòng": "hai-phong", "Hậu Giang": "hau-giang", "Hòa Bình": "hoa-binh", "Hưng Yên": "hung-yen",
+    "Khánh Hòa": "khanh-hoa", "Kiên Giang": "kien-giang", "Kon Tum": "kon-tum", "Lai Châu": "lai-chau",
+    "Lâm Đồng": "lam-dong", "Lạng Sơn": "lang-son", "Lào Cai": "lao-cai", "Long An": "long-an",
+    "Nam Định": "nam-dinh", "Nghệ An": "nghe-an", "Ninh Bình": "ninh-binh", "Ninh Thuận": "ninh-thuan",
+    "Phú Thọ": "phu-tho", "Phú Yên": "phu-yen", "Quảng Bình": "quang-binh", "Quảng Nam": "quang-nam",
+    "Quảng Ngãi": "quang-ngai", "Quảng Ninh": "quang-ninh", "Quảng Trị": "quang-tri", "Sóc Trăng": "soc-trang",
+    "Sơn La": "son-la", "Tây Ninh": "tay-ninh", "Thái Bình": "thai-binh", "Thái Nguyên": "thai-nguyen",
+    "Thanh Hóa": "thanh-hoa", "Thừa Thiên Huế": "thua-thien-hue", "Tiền Giang": "tien-giang",
+    "TP. Hồ Chí Minh": "ho-chi-minh", "Trà Vinh": "tra-vinh", "Tuyên Quang": "tuyen-quang",
+    "Vĩnh Long": "vinh-long", "Vĩnh Phúc": "vinh-phuc", "Yên Bái": "yen-bai"
 }
 USERS_FILE = "users.json"
 WATCHLIST_FILE = "watchlist.json"
@@ -38,17 +52,15 @@ def verify_user(username, password):
         return bcrypt.checkpw(password.encode("utf-8"), hashed_pw)
     return False
 
-# ==============================
-# WATCHLIST & HISTORY
+def save_json_file(filename, data):
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 def load_json_file(filename):
     if os.path.exists(filename):
         with open(filename, "r", encoding="utf-8") as f:
             return json.load(f)
     return []
-
-def save_json_file(filename, data):
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
 
 # ==============================
 # FETCH DATA
@@ -122,7 +134,7 @@ def show_login():
             st.session_state["logged_in"] = True
             st.session_state["username"] = username
             st.success(f"✅ Xin chào {username}!")
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("❌ Sai tên đăng nhập hoặc mật khẩu")
 
@@ -213,65 +225,24 @@ def theo_doi_tab():
             watchlist = [item for item in watchlist if item["Mã số thuế"] != selected_row["Mã số thuế"]]
             save_json_file(WATCHLIST_FILE, watchlist)
             st.success("✅ Đã xoá khỏi danh sách")
-            st.experimental_rerun()
+            st.rerun()
 
         st.download_button("💾 Tải Excel", df_watch.to_csv(index=False).encode("utf-8"), "theo_doi.csv")
     else:
         st.info("📭 Danh sách theo dõi trống")
 
-def quan_ly_user_tab():
-    st.header("👑 Quản lý người dùng (Admin)")
-    users = load_users()
-
-    # Hiển thị danh sách user
-    st.subheader("📋 Danh sách người dùng")
-    df_users = pd.DataFrame({"Username": list(users.keys())})
-    st.dataframe(df_users)
-
-    # Thêm user
-    st.subheader("➕ Thêm người dùng mới")
-    new_user = st.text_input("Tên user mới")
-    new_pass = st.text_input("Mật khẩu", type="password")
-    if st.button("✅ Thêm user"):
-        if new_user and new_pass:
-            if new_user in users:
-                st.warning("⚠️ User đã tồn tại")
-            else:
-                hashed_pw = bcrypt.hashpw(new_pass.encode(), bcrypt.gensalt()).decode()
-                users[new_user] = hashed_pw
-                save_json_file(USERS_FILE, users)
-                st.success(f"🎉 Đã thêm user: {new_user}")
-                st.experimental_rerun()
-
-    # Xoá user
-    st.subheader("🗑️ Xoá người dùng")
-    user_to_delete = st.selectbox("Chọn user để xoá", [u for u in users if u != "admin"])
-    if st.button("❌ Xoá user"):
-        del users[user_to_delete]
-        save_json_file(USERS_FILE, users)
-        st.success(f"✅ Đã xoá user: {user_to_delete}")
-        st.experimental_rerun()
-
 # ==============================
 # MAIN APP
 def main_app():
     st.sidebar.title(f"Xin chào, {st.session_state['username']}")
-    menu_items = ["Tra cứu doanh nghiệp", "Theo dõi doanh nghiệp"]
-    if st.session_state["username"] == "admin":
-        menu_items.append("Quản lý người dùng (Admin)")
-
-    page = st.sidebar.radio("📂 Menu", menu_items)
-
+    page = st.sidebar.radio("📂 Menu", ["Tra cứu doanh nghiệp", "Theo dõi doanh nghiệp"])
     if page == "Tra cứu doanh nghiệp":
         tra_cuu_tab()
     elif page == "Theo dõi doanh nghiệp":
         theo_doi_tab()
-    elif page == "Quản lý người dùng (Admin)":
-        quan_ly_user_tab()
-
     if st.sidebar.button("🚪 Đăng xuất"):
         st.session_state.clear()
-        st.experimental_rerun()
+        st.rerun()
 
 # ==============================
 # ENTRY POINT
