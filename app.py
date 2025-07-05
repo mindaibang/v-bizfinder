@@ -13,22 +13,6 @@ WATCHLIST_DIR = "watchlists"
 if not os.path.exists(WATCHLIST_DIR):
     os.makedirs(WATCHLIST_DIR)
 
-PROVINCES = [
-    "Tất cả", "An Giang", "Bà Rịa - Vũng Tàu", "Bắc Giang", "Bắc Kạn",
-    "Bạc Liêu", "Bắc Ninh", "Bến Tre", "Bình Định", "Bình Dương",
-    "Bình Phước", "Bình Thuận", "Cà Mau", "Cần Thơ", "Cao Bằng",
-    "Đà Nẵng", "Đắk Lắk", "Đắk Nông", "Điện Biên", "Đồng Nai",
-    "Đồng Tháp", "Gia Lai", "Hà Giang", "Hà Nam", "Hà Nội", "Hà Tĩnh",
-    "Hải Dương", "Hải Phòng", "Hậu Giang", "Hòa Bình", "Hưng Yên",
-    "Khánh Hòa", "Kiên Giang", "Kon Tum", "Lai Châu", "Lâm Đồng",
-    "Lạng Sơn", "Lào Cai", "Long An", "Nam Định", "Nghệ An",
-    "Ninh Bình", "Ninh Thuận", "Phú Thọ", "Phú Yên", "Quảng Bình",
-    "Quảng Nam", "Quảng Ngãi", "Quảng Ninh", "Quảng Trị", "Sóc Trăng",
-    "Sơn La", "Tây Ninh", "Thái Bình", "Thái Nguyên", "Thanh Hóa",
-    "Thừa Thiên Huế", "Tiền Giang", "TP. Hồ Chí Minh", "Trà Vinh",
-    "Tuyên Quang", "Vĩnh Long", "Vĩnh Phúc", "Yên Bái"
-]
-
 # ========== AUTH ==========
 def load_users():
     if os.path.exists(USERS_FILE):
@@ -59,42 +43,6 @@ def get_watchlist_file(username):
     return os.path.join(WATCHLIST_DIR, f"watchlist_{username}.json")
 
 # ========== FETCH ==========
-def fetch_new_companies(pages=5):
-    rows = []
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        )
-    }
-    for page in range(1, pages + 1):
-        url = f"{BASE_URL}/tra-cuu-ma-so-thue-doanh-nghiep-moi-thanh-lap?page={page}"
-        try:
-            resp = requests.get(url, headers=headers, timeout=10)
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.text, "html.parser")
-            listings = soup.select("div.tax-listing div[data-prefetch]")
-            for div in listings:
-                a_tag = div.find("a")
-                addr_tag = div.find("address")
-                tax_code = div.get("data-prefetch").split("-")[0].strip("/")
-                if a_tag and addr_tag:
-                    name = a_tag.get_text(strip=True)
-                    link = BASE_URL + a_tag['href']
-                    address = addr_tag.get_text(strip=True)
-                    rows.append({
-                        "Tên doanh nghiệp": name,
-                        "Mã số thuế": tax_code,
-                        "Địa chỉ": address,
-                        "Link": link
-                    })
-        except Exception as e:
-            st.error(f"⚠️ Lỗi khi tải trang {page}: {e}")
-    df = pd.DataFrame(rows)
-    df.index += 1  # STT từ 1
-    return df
-
 def fetch_company_details(link):
     headers = {
         "User-Agent": (
@@ -134,66 +82,32 @@ def show_login():
         else:
             st.error("❌ Sai tên đăng nhập hoặc mật khẩu")
 
-def tra_cuu_tab():
-    st.header("📊 Tra cứu doanh nghiệp mới thành lập")
-    st.markdown("_Tác giả: **Ngô Thị Thơm - VietinBank CN Bảo Lộc - 0919026552**; lync: **thom.nt**_")
-    st.markdown("💙 *Dành tặng riêng cho các VietinBanker*")
-
-    if st.button("🔍 Tra cứu 5 trang mới nhất"):
-        st.info("⏳ Đang tải dữ liệu...")
-        df = fetch_new_companies()
-        if df.empty:
-            st.warning("⚠️ Không tìm thấy dữ liệu.")
-        else:
-            st.session_state["search_results"] = df
-            st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp mới.")
-
-    if "search_results" in st.session_state:
-        df = st.session_state["search_results"]
-        province_filter = st.selectbox("📍 Lọc theo tỉnh/TP", PROVINCES)
-        if province_filter != "Tất cả":
-            df = df[df["Địa chỉ"].str.contains(province_filter, case=False, na=False)]
-        st.dataframe(df.drop(columns=["Link"]), use_container_width=True)
-
-        selected_idx = st.number_input("Nhập STT doanh nghiệp để thao tác", min_value=1, max_value=len(df), step=1)
-        selected_row = df.iloc[selected_idx - 1]
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("📄 Xem chi tiết"):
-                details = fetch_company_details(selected_row["Link"])
-                with st.expander(f"📄 Chi tiết: {selected_row['Tên doanh nghiệp']}", expanded=True):
-                    for k, v in details.items():
-                        st.markdown(f"**{k}**: {v}")
-        with col2:
-            if st.button("⭐ Thêm vào theo dõi"):
-                watchlist_file = get_watchlist_file(st.session_state["username"])
-                watchlist = load_json_file(watchlist_file)
-                if any(item['Link'] == selected_row['Link'] for item in watchlist):
-                    st.info("✅ Doanh nghiệp đã có trong danh sách theo dõi.")
-                else:
-                    selected_row["Ghi chú"] = ""
-                    watchlist.append(selected_row.to_dict())
-                    save_json_file(watchlist_file, watchlist)
-                    st.success("✅ Đã thêm vào danh sách theo dõi.")
-
 def theo_doi_tab():
     st.header("👁️ Theo dõi doanh nghiệp")
     watchlist_file = get_watchlist_file(st.session_state["username"])
     watchlist = load_json_file(watchlist_file)
+
     if watchlist:
-        df = pd.DataFrame(watchlist).drop(columns=["Link"])
-        df.index += 1
-        st.dataframe(df, use_container_width=True)
+        df = pd.DataFrame(watchlist)
+        df.index += 1  # STT từ 1
+        selected = st.dataframe(df[["Tên doanh nghiệp", "Mã số thuế", "Địa chỉ", "Ghi chú"]], use_container_width=True)
 
-        selected_idx = st.number_input("Nhập STT doanh nghiệp để thao tác", min_value=1, max_value=len(df), step=1)
+        st.markdown("💡 *Click vào dòng để xem chi tiết*")
+        for idx, row in df.iterrows():
+            if st.button(f"📄 Chi tiết: {row['Tên doanh nghiệp']}", key=f"detail_{idx}"):
+                details = fetch_company_details(row["Link"])
+                with st.expander(f"📄 Thông tin chi tiết: {row['Tên doanh nghiệp']}", expanded=True):
+                    for k, v in details.items():
+                        st.markdown(f"**{k}**: {v}")
+
+        selected_idx = st.number_input("Nhập STT doanh nghiệp để chỉnh sửa", min_value=1, max_value=len(df), step=1)
         selected_row = df.iloc[selected_idx - 1]
+        note = st.text_area("📝 Ghi chú", value=selected_row.get("Ghi chú", ""), key=f"note_{selected_idx}")
 
-        st.text_area("📝 Ghi chú", value=selected_row.get("Ghi chú", ""), key=f"note_{selected_idx}", height=100)
         col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("💾 Lưu ghi chú"):
-                watchlist[selected_idx - 1]["Ghi chú"] = st.session_state[f"note_{selected_idx}"]
+                watchlist[selected_idx - 1]["Ghi chú"] = note
                 save_json_file(watchlist_file, watchlist)
                 st.success("✅ Đã lưu ghi chú.")
         with col2:
@@ -217,18 +131,80 @@ def theo_doi_tab():
     else:
         st.info("📭 Danh sách theo dõi trống.")
 
+def quan_ly_user_tab():
+    st.header("👑 Quản lý người dùng")
+    users = load_users()
+    st.subheader("📋 Danh sách user")
+    st.table(pd.DataFrame(list(users.keys()), columns=["Tên đăng nhập"]))
+
+    st.subheader("➕ Thêm user mới")
+    new_user = st.text_input("Tên đăng nhập")
+    new_pass = st.text_input("Mật khẩu", type="password")
+    if st.button("Thêm user"):
+        if new_user in users:
+            st.warning("⚠️ User đã tồn tại.")
+        else:
+            hashed_pw = bcrypt.hashpw(new_pass.encode(), bcrypt.gensalt()).decode()
+            users[new_user] = hashed_pw
+            save_json_file(USERS_FILE, users)
+            st.success(f"✅ Đã thêm user {new_user}.")
+
+    st.subheader("📥 Thêm user theo lô")
+    uploaded_file = st.file_uploader("Tải file Excel (cột A: username, cột B: password)", type=["xlsx"])
+    if uploaded_file:
+        df_users = pd.read_excel(uploaded_file)
+        for _, row in df_users.iterrows():
+            uname, upass = row[0], row[1]
+            if uname not in users:
+                hashed_pw = bcrypt.hashpw(str(upass).encode(), bcrypt.gensalt()).decode()
+                users[uname] = hashed_pw
+        save_json_file(USERS_FILE, users)
+        st.success("✅ Đã thêm user từ file Excel.")
+
+    st.subheader("🔑 Reset mật khẩu user")
+    reset_user = st.selectbox("Chọn user", list(users.keys()))
+    if st.button("Reset mật khẩu"):
+        users[reset_user] = bcrypt.hashpw("123456".encode(), bcrypt.gensalt()).decode()
+        save_json_file(USERS_FILE, users)
+        st.success(f"✅ Mật khẩu của {reset_user} đã reset về 123456.")
+
+    st.subheader("🗑 Xoá user")
+    delete_user = st.selectbox("Chọn user để xoá", [u for u in users if u != "admin"])
+    if st.button("Xoá user"):
+        users.pop(delete_user)
+        save_json_file(USERS_FILE, users)
+        st.success(f"✅ Đã xoá user {delete_user}.")
+
+def huong_dan_tab():
+    st.header("📖 Hướng dẫn sử dụng")
+    st.markdown("""
+    ✅ **Tra cứu doanh nghiệp mới thành lập**
+    - Vào tab "Tra cứu", bấm **Tra cứu 5 trang mới nhất** để lấy dữ liệu.
+    - Có thể xuất ra Excel hoặc xem trực tiếp trên màn hình.
+    - **Hãy thêm doanh nghiệp quan tâm vào danh sách theo dõi để quản lý.**
+
+    ✅ **Theo dõi doanh nghiệp**
+    - Vào tab "Theo dõi", xem danh sách doanh nghiệp bạn đã thêm.
+    - Có thể **thêm ghi chú, sửa hoặc xoá doanh nghiệp**.
+    - Click vào dòng để xem thông tin chi tiết.
+
+    ⚠️ **Lưu ý**: Danh sách doanh nghiệp mới **được cập nhật liên tục**. Hãy tra cứu và cập nhật mỗi ngày!
+    """)
+
 # ========== MAIN ==========
 def main_app():
     st.sidebar.title(f"Xin chào, {st.session_state['username']}")
-    pages = ["Tra cứu doanh nghiệp", "Theo dõi doanh nghiệp"]
-    if st.session_state["username"] == "admin":
-        pages.append("Quản lý người dùng")
+    pages = ["Theo dõi doanh nghiệp", "Quản lý người dùng", "Hướng dẫn"]
+    if st.session_state["username"] != "admin":
+        pages.remove("Quản lý người dùng")
     page = st.sidebar.radio("📂 Menu", pages)
 
-    if page == "Tra cứu doanh nghiệp":
-        tra_cuu_tab()
-    elif page == "Theo dõi doanh nghiệp":
+    if page == "Theo dõi doanh nghiệp":
         theo_doi_tab()
+    elif page == "Quản lý người dùng":
+        quan_ly_user_tab()
+    elif page == "Hướng dẫn":
+        huong_dan_tab()
 
     if st.sidebar.button("🚪 Đăng xuất"):
         st.session_state.clear()
