@@ -44,7 +44,7 @@ def load_json_file(filename):
 # FETCH DATA
 def fetch_new_companies(pages=5):
     """
-    Crawl các doanh nghiệp mới thành lập
+    Crawl các trang mới nhất
     """
     rows = []
     headers = {
@@ -61,7 +61,6 @@ def fetch_new_companies(pages=5):
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
             listings = soup.select("div.tax-listing div[data-prefetch]")
-
             for div in listings:
                 a_tag = div.find("a")
                 addr_tag = div.find("address")
@@ -73,9 +72,9 @@ def fetch_new_companies(pages=5):
                     address = addr_tag.get_text(strip=True)
                     rows.append({
                         "Tên doanh nghiệp": name,
-                        "Mã số thuế": tax_code,
+                        "Mã số thuế": tax_code.lstrip("/"),
                         "Địa chỉ": address,
-                        "Link": link  # ẩn trong bảng
+                        "Link": link
                     })
         except Exception as e:
             st.error(f"⚠️ Lỗi khi tải trang {page}: {e}")
@@ -83,7 +82,7 @@ def fetch_new_companies(pages=5):
 
 def fetch_company_details(link):
     """
-    Lấy chi tiết doanh nghiệp từ trang link
+    Crawl trang chi tiết doanh nghiệp
     """
     headers = {
         "User-Agent": (
@@ -138,31 +137,34 @@ def tra_cuu_tab():
             st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp mới.")
 
     if "search_results" in st.session_state:
-        df = st.session_state["search_results"].drop(columns=["Link"])
+        df = st.session_state["search_results"]
         st.subheader("📋 Kết quả tìm kiếm")
-        st.dataframe(df, use_container_width=True)
 
-        for idx, row in st.session_state["search_results"].iterrows():
-            with st.expander(f"📋 {row['Tên doanh nghiệp']}"):
-                col1, col2 = st.columns([6, 1])
-                with col1:
-                    st.markdown(f"🆔 **Mã số thuế**: {row['Mã số thuế']}")
-                    st.markdown(f"📍 **Địa chỉ**: {row['Địa chỉ']}")
-                with col2:
-                    if st.button(f"📄 Xem chi tiết #{idx}"):
-                        details = fetch_company_details(row['Link'])
-                        with st.modal(f"📄 Chi tiết: {row['Tên doanh nghiệp']}"):
-                            for k, v in details.items():
-                                st.write(f"**{k}:** {v}")
+        # Ẩn cột Link
+        display_df = df.drop(columns=["Link"])
+        st.dataframe(display_df, use_container_width=True)
 
-                    if st.button(f"⭐ Theo dõi #{idx}"):
-                        watchlist = load_json_file(WATCHLIST_FILE)
-                        if any(w['Link'] == row['Link'] for w in watchlist):
-                            st.info("✅ Doanh nghiệp đã trong danh sách theo dõi.")
-                        else:
-                            watchlist.append(row.to_dict())
-                            save_json_file(WATCHLIST_FILE, watchlist)
-                            st.success("✅ Đã thêm vào danh sách theo dõi.")
+        # Hiện menu 3 chấm cho từng dòng
+        for idx, row in df.iterrows():
+            menu = st.button(f"⋮ Menu #{idx}", key=f"menu_{idx}")
+            if menu:
+                selected = st.radio(
+                    "Chọn hành động:",
+                    ["📄 Xem chi tiết", "⭐ Thêm vào theo dõi"],
+                    key=f"action_{idx}"
+                )
+                if selected == "📄 Xem chi tiết":
+                    details = fetch_company_details(row["Link"])
+                    st.write(f"### 📄 Chi tiết: {row['Tên doanh nghiệp']}")
+                    st.json(details)
+                elif selected == "⭐ Thêm vào theo dõi":
+                    watchlist = load_json_file(WATCHLIST_FILE)
+                    if any(w['Link'] == row['Link'] for w in watchlist):
+                        st.info("✅ Doanh nghiệp đã trong danh sách theo dõi.")
+                    else:
+                        watchlist.append(row.to_dict())
+                        save_json_file(WATCHLIST_FILE, watchlist)
+                        st.success("✅ Đã thêm vào danh sách theo dõi.")
 
 def theo_doi_tab():
     st.header("👁️ Theo dõi doanh nghiệp")
@@ -170,8 +172,8 @@ def theo_doi_tab():
     if watchlist:
         df = pd.DataFrame(watchlist).drop(columns=["Link"])
         st.dataframe(df, use_container_width=True)
-        for idx, row in pd.DataFrame(watchlist).iterrows():
-            if st.button(f"❌ Bỏ theo dõi #{idx}"):
+        for idx, row in df.iterrows():
+            if st.button(f"❌ Bỏ theo dõi #{idx}", key=f"unwatch_{idx}"):
                 watchlist = [w for w in watchlist if w['Link'] != row['Link']]
                 save_json_file(WATCHLIST_FILE, watchlist)
                 st.success("✅ Đã bỏ theo dõi.")
