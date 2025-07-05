@@ -5,14 +5,12 @@ from bs4 import BeautifulSoup
 import bcrypt
 import json
 import os
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
 
 # ===========================
 # CONFIG
 BASE_URL = "https://masothue.com"
 USERS_FILE = "users.json"
 WATCHLIST_FILE = "watchlist.json"
-
 
 # ===========================
 # AUTHENTICATION
@@ -25,7 +23,6 @@ def load_users():
     save_json_file(USERS_FILE, users)
     return users
 
-
 def verify_user(username, password):
     users = load_users()
     if username in users:
@@ -33,18 +30,15 @@ def verify_user(username, password):
         return bcrypt.checkpw(password.encode(), hashed_pw)
     return False
 
-
 def save_json_file(filename, data):
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-
 
 def load_json_file(filename):
     if os.path.exists(filename):
         with open(filename, "r", encoding="utf-8") as f:
             return json.load(f)
     return []
-
 
 # ===========================
 # FETCH DATA
@@ -77,12 +71,11 @@ def fetch_new_companies(pages=5):
                         "Tên doanh nghiệp": name,
                         "Mã số thuế": tax_code,
                         "Địa chỉ": address,
-                        "Link": link
+                        "Link": link  # Ẩn cột này khi hiển thị
                     })
         except Exception as e:
             st.error(f"⚠️ Lỗi khi tải trang {page}: {e}")
     return pd.DataFrame(rows)
-
 
 def fetch_company_details(link):
     """
@@ -111,7 +104,6 @@ def fetch_company_details(link):
         st.error(f"⚠️ Lỗi khi tải chi tiết: {e}")
     return details
 
-
 # ===========================
 # UI COMPONENTS
 def show_login():
@@ -127,10 +119,8 @@ def show_login():
         else:
             st.error("❌ Sai tên đăng nhập hoặc mật khẩu")
 
-
 def tra_cuu_tab():
     st.header("📊 Tra cứu doanh nghiệp mới thành lập")
-
     if st.button("🔍 Tra cứu 5 trang mới nhất"):
         st.info("⏳ Đang tải dữ liệu...")
         df = fetch_new_companies()
@@ -142,62 +132,31 @@ def tra_cuu_tab():
 
     if "search_results" in st.session_state:
         df = st.session_state["search_results"]
-
         st.subheader("📋 Kết quả tìm kiếm")
-        gb = GridOptionsBuilder.from_dataframe(df.drop(columns=["Link"]))
-        gb.configure_pagination()
-        gb.configure_grid_options(
-            suppressContextMenu=False,
-            getContextMenuItems=JsCode("""
-            function(params) {
-                return [
-                    {
-                        name: '📄 Xem chi tiết',
-                        action: function() {
-                            window.parent.postMessage({
-                                type: 'detail', 
-                                rowIndex: params.node.rowIndex
-                            }, '*');
-                        }
-                    },
-                    {
-                        name: '⭐ Thêm vào theo dõi',
-                        action: function() {
-                            window.parent.postMessage({
-                                type: 'watchlist', 
-                                rowIndex: params.node.rowIndex
-                            }, '*');
-                        }
-                    }
-                ];
-            }
-            """)
-        )
-        grid = AgGrid(
-            df.drop(columns=["Link"]),
-            gridOptions=gb.build(),
-            update_mode=GridUpdateMode.NO_UPDATE,
-            allow_unsafe_jscode=True
-        )
-
-        # Xử lý menu chuột phải
-        if "aggrid_event" in st.session_state:
-            event = st.session_state.pop("aggrid_event")
-            row = df.iloc[event["rowIndex"]]
-            if event["type"] == "detail":
-                details = fetch_company_details(row["Link"])
-                with st.modal(f"📄 Chi tiết: {row['Tên doanh nghiệp']}"):
-                    for k, v in details.items():
-                        st.markdown(f"**{k}:** {v}")
-            elif event["type"] == "watchlist":
-                watchlist = load_json_file(WATCHLIST_FILE)
-                if any(w['Link'] == row['Link'] for w in watchlist):
-                    st.info("✅ Doanh nghiệp đã trong danh sách theo dõi.")
-                else:
-                    watchlist.append(row.to_dict())
-                    save_json_file(WATCHLIST_FILE, watchlist)
-                    st.success("✅ Đã thêm vào danh sách theo dõi.")
-
+        df_display = df.drop(columns=["Link"])
+        for idx, row in df_display.iterrows():
+            with st.container():
+                col1, col2 = st.columns([6,1])
+                with col1:
+                    st.markdown(f"**🏢 {row['Tên doanh nghiệp']}**")
+                    st.markdown(f"🆔 **Mã số thuế**: {row['Mã số thuế']}")
+                    st.markdown(f"📍 **Địa chỉ**: {row['Địa chỉ']}")
+                with col2:
+                    if st.button(f"⋮ Menu #{idx}"):
+                        option = st.radio("Chọn hành động", ["📄 Xem chi tiết", "⭐ Thêm vào theo dõi"], key=f"menu_{idx}")
+                        if option == "📄 Xem chi tiết":
+                            details = fetch_company_details(df.iloc[idx]["Link"])
+                            with st.modal(f"📄 Chi tiết: {row['Tên doanh nghiệp']}"):
+                                for k, v in details.items():
+                                    st.markdown(f"**{k}:** {v}")
+                        elif option == "⭐ Thêm vào theo dõi":
+                            watchlist = load_json_file(WATCHLIST_FILE)
+                            if any(w['Link'] == df.iloc[idx]["Link"] for w in watchlist):
+                                st.info("✅ Doanh nghiệp đã trong danh sách theo dõi.")
+                            else:
+                                watchlist.append(df.iloc[idx].to_dict())
+                                save_json_file(WATCHLIST_FILE, watchlist)
+                                st.success("✅ Đã thêm vào danh sách theo dõi.")
 
 def theo_doi_tab():
     st.header("👁️ Theo dõi doanh nghiệp")
@@ -208,13 +167,10 @@ def theo_doi_tab():
     else:
         st.info("📭 Danh sách theo dõi trống.")
 
-
 def quan_ly_user_tab():
     st.header("👑 Quản lý người dùng")
     users = load_users()
-    st.subheader(f"📋 Danh sách user (Tổng: {len(users)})")
     st.table(pd.DataFrame(list(users.keys()), columns=["Tên đăng nhập"]))
-
 
 # ===========================
 # MAIN APP
@@ -235,7 +191,6 @@ def main_app():
     if st.sidebar.button("🚪 Đăng xuất"):
         st.session_state.clear()
         st.rerun()
-
 
 # ===========================
 # ENTRY POINT
