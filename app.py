@@ -2,18 +2,16 @@ import streamlit as st
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-import bcrypt
 import json
+import bcrypt
 import os
 
-# ===========================
-# CONFIG
+# ========== CONFIG ==========
 BASE_URL = "https://masothue.com"
 USERS_FILE = "users.json"
 WATCHLIST_FILE = "watchlist.json"
 
-# ===========================
-# AUTHENTICATION
+# ========== AUTH ==========
 def load_users():
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, "r", encoding="utf-8") as f:
@@ -40,18 +38,13 @@ def load_json_file(filename):
             return json.load(f)
     return []
 
-# ===========================
-# FETCH DATA
+# ========== FETCH ==========
 def fetch_new_companies(pages=5):
     """
     Crawl 5 trang mới nhất
     """
     rows = []
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/124.0.0.0 Safari/537.36"
-    }
+    headers = {"User-Agent": "Mozilla/5.0"}
     for page in range(1, pages + 1):
         url = f"{BASE_URL}/tra-cuu-ma-so-thue-doanh-nghiep-moi-thanh-lap?page={page}"
         try:
@@ -71,7 +64,7 @@ def fetch_new_companies(pages=5):
                         "Tên doanh nghiệp": name,
                         "Mã số thuế": tax_code,
                         "Địa chỉ": address,
-                        "Link": link  # Ẩn cột này khi hiển thị
+                        "Link": link
                     })
         except Exception as e:
             st.error(f"⚠️ Lỗi khi tải trang {page}: {e}")
@@ -81,11 +74,7 @@ def fetch_company_details(link):
     """
     Crawl trang chi tiết doanh nghiệp
     """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 (KHTML, like Gecko) "
-                      "Chrome/124.0.0.0 Safari/537.36"
-    }
+    headers = {"User-Agent": "Mozilla/5.0"}
     details = {}
     try:
         resp = requests.get(link, headers=headers, timeout=10)
@@ -104,8 +93,7 @@ def fetch_company_details(link):
         st.error(f"⚠️ Lỗi khi tải chi tiết: {e}")
     return details
 
-# ===========================
-# UI COMPONENTS
+# ========== UI ==========
 def show_login():
     st.title("🔒 Đăng nhập")
     username = st.text_input("Tên đăng nhập")
@@ -132,65 +120,63 @@ def tra_cuu_tab():
 
     if "search_results" in st.session_state:
         df = st.session_state["search_results"]
-        st.subheader("📋 Kết quả tìm kiếm")
-        df_display = df.drop(columns=["Link"])  # Ẩn cột Link khi hiển thị
-        for i in df_display.index:
-            cols = st.columns([4,1])
-            with cols[0]:
-                st.write(df_display.loc[i])
-            with cols[1]:
-                if st.button(f"⋮ Menu {i}"):
-                    choice = st.radio("Chọn hành động:", ["📄 Xem chi tiết", "⭐ Thêm vào theo dõi"], key=f"menu_{i}")
-                    if choice == "📄 Xem chi tiết":
-                        details = fetch_company_details(df.loc[i, "Link"])
-                        with st.modal(f"📄 Chi tiết: {df.loc[i, 'Tên doanh nghiệp']}"):
+        df_display = df.drop(columns=["Link"])  # Ẩn cột Link
+        st.dataframe(df_display, use_container_width=True)
+
+        st.subheader("📋 Menu từng dòng")
+        for i, row in df.iterrows():
+            col1, col2 = st.columns([8,1])
+            with col1:
+                st.write(f"**{row['Tên doanh nghiệp']}** | {row['Mã số thuế']} | {row['Địa chỉ']}")
+            with col2:
+                if st.button(f"⋮ Menu #{i}"):
+                    action = st.radio("Chọn hành động:", ["📄 Xem chi tiết", "⭐ Theo dõi"], key=f"menu_{i}")
+                    if action == "📄 Xem chi tiết":
+                        details = fetch_company_details(row["Link"])
+                        with st.modal(f"📄 Chi tiết: {row['Tên doanh nghiệp']}"):
                             for k, v in details.items():
                                 st.markdown(f"**{k}:** {v}")
-                    elif choice == "⭐ Thêm vào theo dõi":
+                    elif action == "⭐ Theo dõi":
                         watchlist = load_json_file(WATCHLIST_FILE)
-                        if any(w['Link'] == df.loc[i, "Link"] for w in watchlist):
-                            st.info("✅ Doanh nghiệp đã được theo dõi.")
+                        if any(w['Link'] == row['Link'] for w in watchlist):
+                            st.info("✅ Đã theo dõi")
                         else:
-                            watchlist.append(df.loc[i].to_dict())
+                            watchlist.append(row.to_dict())
                             save_json_file(WATCHLIST_FILE, watchlist)
-                            st.success("✅ Đã thêm vào danh sách theo dõi.")
+                            st.success("✅ Đã thêm vào danh sách theo dõi")
 
 def theo_doi_tab():
-    st.header("👁️ Theo dõi doanh nghiệp")
+    st.header("👁️ Danh sách theo dõi")
     watchlist = load_json_file(WATCHLIST_FILE)
     if watchlist:
         df = pd.DataFrame(watchlist).drop(columns=["Link"])
         st.dataframe(df, use_container_width=True)
     else:
-        st.info("📭 Danh sách theo dõi trống.")
+        st.info("📭 Danh sách trống.")
 
 def quan_ly_user_tab():
     st.header("👑 Quản lý người dùng")
     users = load_users()
     st.table(pd.DataFrame(list(users.keys()), columns=["Tên đăng nhập"]))
 
-# ===========================
-# MAIN APP
+# ========== MAIN ==========
 def main_app():
     st.sidebar.title(f"Xin chào, {st.session_state['username']}")
     pages = ["Tra cứu doanh nghiệp", "Theo dõi doanh nghiệp"]
     if st.session_state["username"] == "admin":
         pages.append("Quản lý người dùng")
     page = st.sidebar.radio("📂 Menu", pages)
-
     if page == "Tra cứu doanh nghiệp":
         tra_cuu_tab()
     elif page == "Theo dõi doanh nghiệp":
         theo_doi_tab()
     elif page == "Quản lý người dùng":
         quan_ly_user_tab()
-
     if st.sidebar.button("🚪 Đăng xuất"):
         st.session_state.clear()
         st.rerun()
 
-# ===========================
-# ENTRY POINT
+# ========== ENTRY ==========
 if "logged_in" not in st.session_state:
     show_login()
 else:
