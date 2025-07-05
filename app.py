@@ -60,7 +60,7 @@ def load_json_file(filename):
 # FETCH DATA
 def fetch_new_companies(pages=5):
     """
-    Crawl danh sách DN mới thành lập
+    Crawl 5 trang mới nhất
     """
     rows = []
     for page in range(1, pages + 1):
@@ -103,13 +103,13 @@ def show_login():
 def tra_cuu_tab():
     st.header("📊 Tra cứu doanh nghiệp mới thành lập")
     if st.button("🔍 Tra cứu"):
-        st.info("⏳ Đang tải dữ liệu...")
+        st.info("⏳ Đang tải dữ liệu (5 trang)...")
         df = fetch_new_companies()
         if df.empty:
             st.warning("⚠️ Không tìm thấy dữ liệu.")
         else:
             st.session_state["search_results"] = df
-            st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp.")
+            st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp mới.")
 
     # Nếu có kết quả đã lưu trong session
     if "search_results" in st.session_state:
