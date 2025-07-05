@@ -9,50 +9,23 @@ from concurrent.futures import ThreadPoolExecutor
 
 # ==============================
 # CONFIG
-BASE_URL = "https://hsctvn.com"
-PROVINCES = {
-    "An Giang": "an-giang", "Bà Rịa - Vũng Tàu": "ba-ria-vung-tau", "Bạc Liêu": "bac-lieu",
-    "Bắc Giang": "bac-giang", "Bắc Kạn": "bac-kan", "Bắc Ninh": "bac-ninh", "Bến Tre": "ben-tre",
-    "Bình Dương": "binh-duong", "Bình Định": "binh-dinh", "Bình Phước": "binh-phuoc",
-    "Bình Thuận": "binh-thuan", "Cà Mau": "ca-mau", "Cần Thơ": "can-tho", "Cao Bằng": "cao-bang",
-    "Đà Nẵng": "da-nang", "Đắk Lắk": "dak-lak", "Đắk Nông": "dak-nong", "Điện Biên": "dien-bien",
-    "Đồng Nai": "dong-nai", "Đồng Tháp": "dong-thap", "Gia Lai": "gia-lai", "Hà Giang": "ha-giang",
-    "Hà Nam": "ha-nam", "Hà Nội": "ha-noi", "Hà Tĩnh": "ha-tinh", "Hải Dương": "hai-duong",
-    "Hải Phòng": "hai-phong", "Hậu Giang": "hau-giang", "Hòa Bình": "hoa-binh", "Hưng Yên": "hung-yen",
-    "Khánh Hòa": "khanh-hoa", "Kiên Giang": "kien-giang", "Kon Tum": "kon-tum", "Lai Châu": "lai-chau",
-    "Lâm Đồng": "lam-dong", "Lạng Sơn": "lang-son", "Lào Cai": "lao-cai", "Long An": "long-an",
-    "Nam Định": "nam-dinh", "Nghệ An": "nghe-an", "Ninh Bình": "ninh-binh", "Ninh Thuận": "ninh-thuan",
-    "Phú Thọ": "phu-tho", "Phú Yên": "phu-yen", "Quảng Bình": "quang-binh", "Quảng Nam": "quang-nam",
-    "Quảng Ngãi": "quang-ngai", "Quảng Ninh": "quang-ninh", "Quảng Trị": "quang-tri", "Sóc Trăng": "soc-trang",
-    "Sơn La": "son-la", "Tây Ninh": "tay-ninh", "Thái Bình": "thai-binh", "Thái Nguyên": "thai-nguyen",
-    "Thanh Hóa": "thanh-hoa", "Thừa Thiên Huế": "thua-thien-hue", "Tiền Giang": "tien-giang",
-    "TP. Hồ Chí Minh": "ho-chi-minh", "Trà Vinh": "tra-vinh", "Tuyên Quang": "tuyen-quang",
-    "Vĩnh Long": "vinh-long", "Vĩnh Phúc": "vinh-phuc", "Yên Bái": "yen-bai"
-}
+BASE_URL = "https://masothue.com"
+PROVINCES = [
+    "An Giang", "Bà Rịa - Vũng Tàu", "Bắc Giang", "Bắc Kạn", "Bạc Liêu",
+    "Bắc Ninh", "Bến Tre", "Bình Định", "Bình Dương", "Bình Phước",
+    "Bình Thuận", "Cà Mau", "Cần Thơ", "Cao Bằng", "Đà Nẵng", "Đắk Lắk",
+    "Đắk Nông", "Điện Biên", "Đồng Nai", "Đồng Tháp", "Gia Lai", "Hà Giang",
+    "Hà Nam", "Hà Nội", "Hà Tĩnh", "Hải Dương", "Hải Phòng", "Hậu Giang",
+    "Hòa Bình", "Hưng Yên", "Khánh Hòa", "Kiên Giang", "Kon Tum", "Lai Châu",
+    "Lâm Đồng", "Lạng Sơn", "Lào Cai", "Long An", "Nam Định", "Nghệ An",
+    "Ninh Bình", "Ninh Thuận", "Phú Thọ", "Phú Yên", "Quảng Bình", "Quảng Nam",
+    "Quảng Ngãi", "Quảng Ninh", "Quảng Trị", "Sóc Trăng", "Sơn La", "Tây Ninh",
+    "Thái Bình", "Thái Nguyên", "Thanh Hóa", "Thừa Thiên Huế", "Tiền Giang",
+    "TP. Hồ Chí Minh", "Trà Vinh", "Tuyên Quang", "Vĩnh Long", "Vĩnh Phúc",
+    "Yên Bái"
+]
 USERS_FILE = "users.json"
 WATCHLIST_FILE = "watchlist.json"
-HISTORY_FILE = "history.json"
-
-import streamlit as st
-import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-import bcrypt
-import json
-import os
-from concurrent.futures import ThreadPoolExecutor
-
-# ==============================
-# CONFIG
-BASE_URL = "https://hsctvn.com"
-PROVINCES = {
-    "An Giang": "an-giang", "Bắc Ninh": "bac-ninh", "Bình Dương": "binh-duong",
-    "Đà Nẵng": "da-nang", "Hà Nội": "ha-noi", "TP. Hồ Chí Minh": "ho-chi-minh"
-    # ... thêm các tỉnh khác
-}
-USERS_FILE = "users.json"
-WATCHLIST_FILE = "watchlist.json"
-HISTORY_FILE = "history.json"
 
 # ==============================
 # AUTHENTICATION
@@ -69,7 +42,7 @@ def verify_user(username, password):
     users = load_users()
     if username in users:
         hashed_pw = users[username].encode("utf-8")
-        return bcrypt.checkpw(password.encode("utf-8"), hashed_pw)
+        return bcrypt.checkpw(password.encode(), hashed_pw)
     return False
 
 def save_json_file(filename, data):
@@ -84,62 +57,74 @@ def load_json_file(filename):
 
 # ==============================
 # FETCH DATA
-def fetch_announcements(month, year, province_slug):
-    url = f"{BASE_URL}/thang-{month}/{year}-{province_slug}"
+def fetch_new_companies(province, pages=1):
+    """
+    Lấy danh sách DN mới thành lập, lọc theo tỉnh/thành
+    """
     rows = []
-    try:
-        resp = requests.get(url, timeout=10, verify=False)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        for li in soup.find_all("li"):
-            h3 = li.find("h3")
-            if not h3:
-                continue
-            a = h3.find("a")
-            name = a.get_text(strip=True)
-            href = a["href"]
-            link = href if href.startswith("http") else BASE_URL + "/" + href.lstrip("/")
-            div = li.find("div")
-            if div and "Mã số thuế:" in div.text:
-                addr, tax = div.get_text(" ", strip=True).split("Mã số thuế:", 1)
-                rows.append({
-                    "Tên doanh nghiệp": name,
-                    "Mã số thuế": tax.strip(),
-                    "Địa chỉ": addr.replace("Địa chỉ:", "").strip(),
-                    "Link": link
-                })
-    except Exception as e:
-        st.error(f"Lỗi khi tải dữ liệu: {e}")
+    for page in range(1, pages + 1):
+        url = f"{BASE_URL}/tra-cuu-ma-so-thue-doanh-nghiep-moi-thanh-lap?page={page}"
+        try:
+            resp = requests.get(url, timeout=10)
+            soup = BeautifulSoup(resp.text, "html.parser")
+            for li in soup.select(".tax-listing li"):
+                name_tag = li.find("a", class_="tax-name")
+                mst_tag = li.find("div", class_="tax-code")
+                addr_tag = li.find("span", class_="address")
+                rep_tag = li.find("span", class_="legal-represent")
+
+                if name_tag and mst_tag and addr_tag:
+                    name = name_tag.get_text(strip=True)
+                    mst = mst_tag.get_text(strip=True).replace("Mã số thuế:", "").strip()
+                    address = addr_tag.get_text(strip=True)
+                    representative = rep_tag.get_text(strip=True) if rep_tag else ""
+                    link = BASE_URL + name_tag["href"]
+
+                    # Lọc theo tỉnh
+                    if province.lower() in address.lower():
+                        rows.append({
+                            "Tên doanh nghiệp": name,
+                            "Mã số thuế": mst,
+                            "Người đại diện": representative,
+                            "Địa chỉ": address,
+                            "Link": link
+                        })
+        except Exception as e:
+            st.error(f"⚠️ Lỗi khi tải trang {page}: {e}")
     return pd.DataFrame(rows)
 
 def fetch_detail(link):
+    """
+    Lấy chi tiết DN từ trang masothue.com
+    """
     try:
-        resp = requests.get(link, timeout=10, verify=False)
+        resp = requests.get(link, timeout=10)
         soup = BeautifulSoup(resp.text, "html.parser")
-        content_lines = []
-        h1 = soup.find("h1")
-        if h1:
-            content_lines.append(f"**Tên doanh nghiệp:** {h1.get_text(strip=True)}")
-        for li in soup.find_all("li"):
+        info = []
+
+        name = soup.find("h1")
+        if name:
+            info.append(f"**Tên doanh nghiệp:** {name.get_text(strip=True)}")
+
+        for li in soup.select(".company-info li"):
             text = li.get_text(" ", strip=True)
-            icon = li.find("i")
-            if not icon:
-                continue
-            cls = icon.get("class", [])
-            if "fa-hashtag" in cls:
-                content_lines.append(f"**Mã số thuế:** {text.replace('Mã số thuế:', '').strip()}")
-            elif "fa-map-marker" in cls:
-                content_lines.append(f"**Địa chỉ thuế:** {text.replace('Địa chỉ:', '').strip()}")
-            elif "fa-user-o" in cls:
-                a = li.find("a")
-                if a:
-                    content_lines.append(f"**Đại diện pháp luật:** {a.get_text(strip=True)}")
-            elif "fa-phone" in cls:
-                content_lines.append(f"**Điện thoại:** {text.replace('Điện thoại:', '').strip()}")
-            elif "fa-calendar" in cls:
-                content_lines.append(f"**Ngày cấp:** {text.replace('Ngày cấp:', '').strip()}")
-            elif "fa-anchor" in cls:
-                content_lines.append(f"**Ngành nghề chính:** {text.replace('Ngành nghề chính:', '').strip()}")
-        return "\n\n".join(content_lines)
+            if "Mã số thuế" in text:
+                info.append(f"**Mã số thuế:** {text.replace('Mã số thuế:', '').strip()}")
+            elif "Địa chỉ" in text:
+                info.append(f"**Địa chỉ:** {text.replace('Địa chỉ:', '').strip()}")
+            elif "Người đại diện" in text:
+                info.append(f"**Người đại diện:** {text.replace('Người đại diện:', '').strip()}")
+            elif "Điện thoại" in text:
+                info.append(f"**Điện thoại:** {text.replace('Điện thoại:', '').strip()}")
+            elif "Email" in text:
+                info.append(f"**Email:** {text.replace('Email:', '').strip()}")
+            elif "Ngày hoạt động" in text:
+                info.append(f"**Ngày hoạt động:** {text.replace('Ngày hoạt động:', '').strip()}")
+            elif "Ngành nghề chính" in text:
+                info.append(f"**Ngành nghề chính:** {text.replace('Ngành nghề chính:', '').strip()}")
+            elif "Tình trạng" in text:
+                info.append(f"**Tình trạng hoạt động:** {text.replace('Tình trạng:', '').strip()}")
+        return "\n\n".join(info)
     except Exception as e:
         return f"⚠️ Lỗi khi tải chi tiết: {e}"
 
@@ -159,52 +144,41 @@ def show_login():
             st.error("❌ Sai tên đăng nhập hoặc mật khẩu")
 
 def tra_cuu_tab():
-    st.header("📊 Tra cứu doanh nghiệp")
-    start_month = st.selectbox("Từ tháng", [f"{i:02d}" for i in range(1, 13)])
-    start_year = st.selectbox("Từ năm", [str(y) for y in range(2020, 2031)])
-    end_month = st.selectbox("Đến tháng", [f"{i:02d}" for i in range(1, 13)])
-    end_year = st.selectbox("Đến năm", [str(y) for y in range(2020, 2031)])
-
-    provinces = st.multiselect("Chọn tỉnh/TP", list(PROVINCES.keys()), help="Chỉ chọn tối đa 2 tỉnh")
-    if len(provinces) > 2:
-        st.warning("⚠️ Chỉ chọn tối đa 2 tỉnh")
+    st.header("📊 Tra cứu doanh nghiệp mới thành lập")
+    province = st.selectbox("Chọn tỉnh/TP", PROVINCES)
+    pages = st.slider("Số trang cần tải (1 trang ≈ 20 DN)", 1, 10, 2)
 
     thread_count = st.slider("Số luồng xử lý", 1, 10, 5)
 
     if st.button("🔍 Tra cứu"):
-        if not provinces:
-            st.warning("⚠️ Vui lòng chọn ít nhất 1 tỉnh")
-        else:
-            results = []
-            with ThreadPoolExecutor(max_workers=thread_count) as executor:
-                futures = [
-                    executor.submit(fetch_announcements, start_month, start_year, PROVINCES[p])
-                    for p in provinces
-                ]
-                for f in futures:
-                    df = f.result()
-                    if not df.empty:
-                        results.append(df)
+        st.info("⏳ Đang tải dữ liệu...")
+        results = []
+        with ThreadPoolExecutor(max_workers=thread_count) as executor:
+            futures = [executor.submit(fetch_new_companies, province, pages)]
+            for f in futures:
+                df = f.result()
+                if not df.empty:
+                    results.append(df)
 
-            if results:
-                final_df = pd.concat(results, ignore_index=True)
-                st.session_state["search_results"] = final_df
-                st.success(f"✅ Đã tìm thấy {len(final_df)} doanh nghiệp")
-                st.dataframe(final_df, use_container_width=True)
+        if results:
+            final_df = pd.concat(results, ignore_index=True)
+            st.session_state["search_results"] = final_df
+            st.success(f"✅ Đã tìm thấy {len(final_df)} doanh nghiệp")
+            st.dataframe(final_df, use_container_width=True)
 
-                selected = st.selectbox("🔗 Chọn doanh nghiệp để xem chi tiết", final_df["Tên doanh nghiệp"])
-                selected_row = final_df[final_df["Tên doanh nghiệp"] == selected].iloc[0]
-                detail = fetch_detail(selected_row["Link"])
-                st.markdown(detail)
+            selected = st.selectbox("🔗 Chọn doanh nghiệp để xem chi tiết", final_df["Tên doanh nghiệp"])
+            selected_row = final_df[final_df["Tên doanh nghiệp"] == selected].iloc[0]
+            detail = fetch_detail(selected_row["Link"])
+            st.markdown(detail)
 
-                if st.button("➕ Thêm vào danh sách theo dõi"):
-                    watchlist = load_json_file(WATCHLIST_FILE)
-                    if any(item["Mã số thuế"] == selected_row["Mã số thuế"] for item in watchlist):
-                        st.info("Doanh nghiệp đã có trong danh sách theo dõi")
-                    else:
-                        watchlist.append(selected_row.to_dict())
-                        save_json_file(WATCHLIST_FILE, watchlist)
-                        st.success("✅ Đã thêm vào danh sách theo dõi")
+            if st.button("➕ Thêm vào danh sách theo dõi"):
+                watchlist = load_json_file(WATCHLIST_FILE)
+                if any(item["Mã số thuế"] == selected_row["Mã số thuế"] for item in watchlist):
+                    st.info("Doanh nghiệp đã có trong danh sách theo dõi")
+                else:
+                    watchlist.append(selected_row.to_dict())
+                    save_json_file(WATCHLIST_FILE, watchlist)
+                    st.success("✅ Đã thêm vào danh sách theo dõi")
 
 def theo_doi_tab():
     st.header("👁️ Theo dõi doanh nghiệp")
@@ -299,5 +273,3 @@ if "logged_in" not in st.session_state:
     show_login()
 else:
     main_app()
-
-
