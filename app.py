@@ -54,34 +54,36 @@ def fetch_new_companies(pages=5):
 # UI
 st.title("📊 Tra cứu doanh nghiệp mới thành lập")
 
+if "search_results" not in st.session_state:
+    st.session_state["search_results"] = pd.DataFrame()
+
 # Nút tra cứu
-if st.button("🔍 Tra cứu"):
+if st.button("🔍 Tra cứu 5 trang mới nhất"):
     st.info("⏳ Đang tải dữ liệu (5 trang)...")
     df = fetch_new_companies(pages=5)
 
     if not df.empty:
         st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp mới.")
-        # Lọc tỉnh
-        provinces = ["Tất cả"] + sorted(list(set([addr.split(",")[-1].strip() for addr in df["Địa chỉ"]])))
-        selected_province = st.selectbox("📍 Lọc theo tỉnh/TP", provinces)
-
-        if selected_province != "Tất cả":
-            filtered_df = df[df["Địa chỉ"].str.contains(selected_province, case=False)]
-        else:
-            filtered_df = df
-
-        st.dataframe(filtered_df, use_container_width=True)
+        st.session_state["search_results"] = df
 
         # Lưu lịch sử
         history = load_json_file(HISTORY_FILE)
-        history.insert(0, {
-            "Tìm kiếm": "Tất cả DN mới",
-            "Số lượng": len(df)
-        })
+        history.insert(0, {"Tìm kiếm": "5 trang mới", "Số lượng": len(df)})
         save_json_file(HISTORY_FILE, history[:10])  # Lưu tối đa 10 dòng
-
     else:
         st.warning("⚠️ Không tìm thấy dữ liệu.")
+
+# Bảng kết quả + filter tỉnh
+if not st.session_state["search_results"].empty:
+    provinces = ["Tất cả"] + sorted(list(set([addr.split(",")[-1].strip() for addr in st.session_state["search_results"]["Địa chỉ"]])))
+    selected_province = st.selectbox("📍 Lọc theo tỉnh/TP", provinces)
+
+    if selected_province != "Tất cả":
+        filtered_df = st.session_state["search_results"][st.session_state["search_results"]["Địa chỉ"].str.contains(selected_province, case=False)]
+    else:
+        filtered_df = st.session_state["search_results"]
+
+    st.dataframe(filtered_df, use_container_width=True)
 
 # Hiển thị lịch sử
 st.subheader("⏳ Lịch sử tìm kiếm")
