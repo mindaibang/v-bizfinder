@@ -46,9 +46,6 @@ def load_json_file(filename):
 # FETCH DATA
 
 def fetch_new_companies(pages=5):
-    """
-    Crawl 5 trang mới nhất
-    """
     rows = []
     for page in range(1, pages + 1):
         url = f"{BASE_URL}/tra-cuu-ma-so-thue-doanh-nghiep-moi-thanh-lap?page={page}"
@@ -59,16 +56,19 @@ def fetch_new_companies(pages=5):
             for div in listings:
                 a_tag = div.find("a")
                 addr_tag = div.find("address")
+                mst_tag = div.find("span", class_="tax-code")
                 rep_tag = div.find("span", class_="tax-represent")
 
-                if a_tag and addr_tag:
+                if a_tag and addr_tag and mst_tag:
                     name = a_tag.get_text(strip=True)
                     link = BASE_URL + a_tag['href']
                     address = addr_tag.get_text(strip=True)
+                    tax_code = mst_tag.get_text(strip=True)
                     representative = rep_tag.get_text(strip=True) if rep_tag else ""
-                    
+
                     rows.append({
                         "Tên doanh nghiệp": name,
+                        "Mã số thuế": tax_code,
                         "Người đại diện": representative,
                         "Địa chỉ": address,
                         "Link": link
@@ -116,22 +116,22 @@ def tra_cuu_tab():
             col1, col2 = st.columns([3,1])
             with col1:
                 st.markdown(f"**{row['Tên doanh nghiệp']}**")
-                st.markdown(f"📍 {row['Địa chỉ']}")
+                st.markdown(f"🆔 {row['Mã số thuế']}")
                 if row['Người đại diện']:
                     st.markdown(f"👤 {row['Người đại diện']}")
+                st.markdown(f"📍 {row['Địa chỉ']}")
             with col2:
                 if st.button(f"🔗 Xem chi tiết #{idx}"):
                     js = f"window.open('{row['Link']}')"
                     st.components.v1.html(f"<script>{js}</script>", height=0)
                 if st.button(f"⭐ Theo dõi #{idx}"):
-                    if st.confirm(f"Bạn có chắc muốn theo dõi {row['Tên doanh nghiệp']}?"):
-                        watchlist = load_json_file(WATCHLIST_FILE)
-                        if any(w['Link'] == row['Link'] for w in watchlist):
-                            st.info("✅ Doanh nghiệp đã trong danh sách theo dõi.")
-                        else:
-                            watchlist.append(row.to_dict())
-                            save_json_file(WATCHLIST_FILE, watchlist)
-                            st.success("✅ Đã thêm vào danh sách theo dõi.")
+                    watchlist = load_json_file(WATCHLIST_FILE)
+                    if any(w['Link'] == row['Link'] for w in watchlist):
+                        st.info("✅ Doanh nghiệp đã trong danh sách theo dõi.")
+                    else:
+                        watchlist.append(row.to_dict())
+                        save_json_file(WATCHLIST_FILE, watchlist)
+                        st.success("✅ Đã thêm vào danh sách theo dõi.")
 
     # Hiển thị lịch sử tìm kiếm
     st.subheader("🕑 Lịch sử tìm kiếm")
@@ -150,11 +150,10 @@ def theo_doi_tab():
         st.dataframe(df, use_container_width=True)
         for idx, row in df.iterrows():
             if st.button(f"❌ Bỏ theo dõi #{idx}"):
-                if st.confirm(f"Bạn có chắc muốn bỏ theo dõi {row['Tên doanh nghiệp']}?"):
-                    watchlist = [w for w in watchlist if w['Link'] != row['Link']]
-                    save_json_file(WATCHLIST_FILE, watchlist)
-                    st.success("✅ Đã bỏ theo dõi.")
-                    st.rerun()
+                watchlist = [w for w in watchlist if w['Link'] != row['Link']]
+                save_json_file(WATCHLIST_FILE, watchlist)
+                st.success("✅ Đã bỏ theo dõi.")
+                st.rerun()
     else:
         st.info("📭 Danh sách theo dõi trống.")
 
@@ -179,20 +178,18 @@ def quan_ly_user_tab():
     st.subheader("🔑 Reset mật khẩu user")
     target_user = st.selectbox("Chọn user", list(users.keys()))
     if st.button("Reset mật khẩu"):
-        if st.confirm(f"Bạn có chắc reset mật khẩu user {target_user}?"):
-            new_hash = bcrypt.hashpw("123456".encode(), bcrypt.gensalt()).decode()
-            users[target_user] = new_hash
-            save_json_file(USERS_FILE, users)
-            st.success(f"✅ Đã reset mật khẩu user {target_user} về mặc định (123456).")
+        new_hash = bcrypt.hashpw("123456".encode(), bcrypt.gensalt()).decode()
+        users[target_user] = new_hash
+        save_json_file(USERS_FILE, users)
+        st.success(f"✅ Đã reset mật khẩu user {target_user} về mặc định (123456).")
 
     st.subheader("🗑 Xóa user")
     user_to_delete = st.selectbox("Chọn user để xoá", [u for u in users if u != "admin"])
     if st.button("Xoá user"):
-        if st.confirm(f"Bạn có chắc muốn xoá user {user_to_delete}?"):
-            users.pop(user_to_delete)
-            save_json_file(USERS_FILE, users)
-            st.success(f"✅ Đã xoá user {user_to_delete}.")
-            st.rerun()
+        users.pop(user_to_delete)
+        save_json_file(USERS_FILE, users)
+        st.success(f"✅ Đã xoá user {user_to_delete}.")
+        st.rerun()
 
 # ===========================
 # MAIN APP
