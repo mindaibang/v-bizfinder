@@ -108,17 +108,19 @@ def tra_cuu_tab():
         if df.empty:
             st.warning("⚠️ Không tìm thấy dữ liệu.")
         else:
+            st.session_state["search_results"] = df
             st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp.")
-            # Dropdown lọc tỉnh
-            province_filter = st.selectbox("Lọc theo tỉnh/TP", PROVINCES)
-            if province_filter != "Tất cả":
-                df = df[df["Địa chỉ"].str.contains(province_filter, case=False, na=False)]
-            st.dataframe(df, use_container_width=True)
 
-            # Lưu lịch sử
-            history = load_json_file(HISTORY_FILE)
-            history.insert(0, {"Tìm kiếm": "Tất cả", "Số DN": len(df)})
-            save_json_file(HISTORY_FILE, history[:10])  # Giữ 10 dòng gần nhất
+    # Nếu có kết quả đã lưu trong session
+    if "search_results" in st.session_state:
+        df = st.session_state["search_results"]
+        # Dropdown lọc tỉnh (chỉ lọc dữ liệu đã có)
+        province_filter = st.selectbox("📍 Lọc theo tỉnh/TP", PROVINCES)
+        if province_filter != "Tất cả":
+            df_filtered = df[df["Địa chỉ"].str.contains(province_filter, case=False, na=False)]
+        else:
+            df_filtered = df
+        st.dataframe(df_filtered, use_container_width=True)
 
 def theo_doi_tab():
     st.header("👁️ Theo dõi doanh nghiệp")
