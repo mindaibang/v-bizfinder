@@ -5,12 +5,11 @@ from bs4 import BeautifulSoup
 import bcrypt
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
 
 # ==============================
 # CONFIG
 BASE_URL = "https://masothue.com"
-PROVINCES = [
+PROVINCES = ["Tất cả"] + [
     "An Giang", "Bà Rịa - Vũng Tàu", "Bắc Giang", "Bắc Kạn", "Bạc Liêu",
     "Bắc Ninh", "Bến Tre", "Bình Định", "Bình Dương", "Bình Phước",
     "Bình Thuận", "Cà Mau", "Cần Thơ", "Cao Bằng", "Đà Nẵng", "Đắk Lắk",
@@ -26,6 +25,7 @@ PROVINCES = [
 ]
 USERS_FILE = "users.json"
 WATCHLIST_FILE = "watchlist.json"
+HISTORY_FILE = "history.json"
 
 # ==============================
 # AUTHENTICATION
@@ -57,10 +57,7 @@ def load_json_file(filename):
 
 # ==============================
 # FETCH DATA
-def fetch_new_companies(province, pages=1):
-    """
-    Lấy danh sách DN mới thành lập, lọc theo tỉnh/thành
-    """
+def fetch_new_companies(province, pages=5):
     rows = []
     for page in range(1, pages + 1):
         url = f"{BASE_URL}/tra-cuu-ma-so-thue-doanh-nghiep-moi-thanh-lap?page={page}"
@@ -80,8 +77,7 @@ def fetch_new_companies(province, pages=1):
                     representative = rep_tag.get_text(strip=True) if rep_tag else ""
                     link = BASE_URL + name_tag["href"]
 
-                    # Lọc theo tỉnh
-                    if province.lower() in address.lower():
+                    if province == "Tất cả" or province.lower() in address.lower():
                         rows.append({
                             "Tên doanh nghiệp": name,
                             "Mã số thuế": mst,
@@ -94,36 +90,16 @@ def fetch_new_companies(province, pages=1):
     return pd.DataFrame(rows)
 
 def fetch_detail(link):
-    """
-    Lấy chi tiết DN từ trang masothue.com
-    """
     try:
         resp = requests.get(link, timeout=10)
         soup = BeautifulSoup(resp.text, "html.parser")
         info = []
-
         name = soup.find("h1")
         if name:
             info.append(f"**Tên doanh nghiệp:** {name.get_text(strip=True)}")
-
         for li in soup.select(".company-info li"):
             text = li.get_text(" ", strip=True)
-            if "Mã số thuế" in text:
-                info.append(f"**Mã số thuế:** {text.replace('Mã số thuế:', '').strip()}")
-            elif "Địa chỉ" in text:
-                info.append(f"**Địa chỉ:** {text.replace('Địa chỉ:', '').strip()}")
-            elif "Người đại diện" in text:
-                info.append(f"**Người đại diện:** {text.replace('Người đại diện:', '').strip()}")
-            elif "Điện thoại" in text:
-                info.append(f"**Điện thoại:** {text.replace('Điện thoại:', '').strip()}")
-            elif "Email" in text:
-                info.append(f"**Email:** {text.replace('Email:', '').strip()}")
-            elif "Ngày hoạt động" in text:
-                info.append(f"**Ngày hoạt động:** {text.replace('Ngày hoạt động:', '').strip()}")
-            elif "Ngành nghề chính" in text:
-                info.append(f"**Ngành nghề chính:** {text.replace('Ngành nghề chính:', '').strip()}")
-            elif "Tình trạng" in text:
-                info.append(f"**Tình trạng hoạt động:** {text.replace('Tình trạng:', '').strip()}")
+            info.append(text)
         return "\n\n".join(info)
     except Exception as e:
         return f"⚠️ Lỗi khi tải chi tiết: {e}"
@@ -146,73 +122,65 @@ def show_login():
 def tra_cuu_tab():
     st.header("📊 Tra cứu doanh nghiệp mới thành lập")
     province = st.selectbox("Chọn tỉnh/TP", PROVINCES)
-    pages = st.slider("Số trang cần tải (1 trang ≈ 20 DN)", 1, 10, 2)
-
-    thread_count = st.slider("Số luồng xử lý", 1, 10, 5)
-
     if st.button("🔍 Tra cứu"):
         st.info("⏳ Đang tải dữ liệu...")
-        results = []
-        with ThreadPoolExecutor(max_workers=thread_count) as executor:
-            futures = [executor.submit(fetch_new_companies, province, pages)]
-            for f in futures:
-                df = f.result()
-                if not df.empty:
-                    results.append(df)
+        df = fetch_new_companies(province)
+        if not df.empty:
+            st.session_state["search_results"] = df
+            history = load_json_file(HISTORY_FILE)
+            history.insert(0, {"province": province, "count": len(df)})
+            save_json_file(HISTORY_FILE, history[:10])  # lưu 10 lần tìm gần nhất
+            st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp")
+        else:
+            st.warning("❌ Không tìm thấy dữ liệu")
 
-        if results:
-            final_df = pd.concat(results, ignore_index=True)
-            st.session_state["search_results"] = final_df
-            st.success(f"✅ Đã tìm thấy {len(final_df)} doanh nghiệp")
-            st.dataframe(final_df, use_container_width=True)
+    if "search_results" in st.session_state:
+        df = st.session_state["search_results"]
+        st.subheader("📄 Kết quả tìm kiếm")
+        st.dataframe(df.drop(columns="Link"), use_container_width=True)
 
-            selected = st.selectbox("🔗 Chọn doanh nghiệp để xem chi tiết", final_df["Tên doanh nghiệp"])
-            selected_row = final_df[final_df["Tên doanh nghiệp"] == selected].iloc[0]
-            detail = fetch_detail(selected_row["Link"])
-            st.markdown(detail)
+        selected = st.selectbox("🔗 Chọn DN để xem chi tiết", df["Tên doanh nghiệp"])
+        selected_row = df[df["Tên doanh nghiệp"] == selected].iloc[0]
+        st.markdown("---")
+        st.markdown(fetch_detail(selected_row["Link"]))
 
-            if st.button("➕ Thêm vào danh sách theo dõi"):
-                watchlist = load_json_file(WATCHLIST_FILE)
-                if any(item["Mã số thuế"] == selected_row["Mã số thuế"] for item in watchlist):
-                    st.info("Doanh nghiệp đã có trong danh sách theo dõi")
-                else:
-                    watchlist.append(selected_row.to_dict())
-                    save_json_file(WATCHLIST_FILE, watchlist)
-                    st.success("✅ Đã thêm vào danh sách theo dõi")
+        if st.button("➕ Thêm vào theo dõi"):
+            watchlist = load_json_file(WATCHLIST_FILE)
+            if any(item["Mã số thuế"] == selected_row["Mã số thuế"] for item in watchlist):
+                st.info("📌 DN đã có trong danh sách theo dõi")
+            else:
+                watchlist.append(selected_row.to_dict())
+                save_json_file(WATCHLIST_FILE, watchlist)
+                st.success("✅ Đã thêm vào danh sách theo dõi")
+
+    st.markdown("## 🕑 Lịch sử tìm kiếm")
+    history = load_json_file(HISTORY_FILE)
+    if history:
+        for item in history:
+            st.write(f"🔎 **{item['province']}** - {item['count']} doanh nghiệp")
 
 def theo_doi_tab():
-    st.header("👁️ Theo dõi doanh nghiệp")
+    st.header("👁️ Danh sách theo dõi DN")
     watchlist = load_json_file(WATCHLIST_FILE)
-
     if watchlist:
         df_watch = pd.DataFrame(watchlist)
-        selected = st.selectbox("🔗 Chọn doanh nghiệp để xem chi tiết", df_watch["Tên doanh nghiệp"])
+        st.dataframe(df_watch.drop(columns="Link"), use_container_width=True)
+        selected = st.selectbox("🔗 Chọn DN để xem chi tiết", df_watch["Tên doanh nghiệp"])
         selected_row = df_watch[df_watch["Tên doanh nghiệp"] == selected].iloc[0]
-        detail = fetch_detail(selected_row["Link"])
-        st.markdown(detail)
-
-        note = st.text_area("📝 Ghi chú", value=selected_row.get("Ghi chú", ""))
-        if st.button("💾 Lưu ghi chú"):
-            for i, item in enumerate(watchlist):
-                if item["Mã số thuế"] == selected_row["Mã số thuế"]:
-                    watchlist[i]["Ghi chú"] = note
-            save_json_file(WATCHLIST_FILE, watchlist)
-            st.success("✅ Đã lưu ghi chú")
-
-        if st.button("🗑️ Xoá doanh nghiệp này"):
+        st.markdown("---")
+        st.markdown(fetch_detail(selected_row["Link"]))
+        if st.button("🗑️ Xoá DN này khỏi theo dõi"):
             watchlist = [item for item in watchlist if item["Mã số thuế"] != selected_row["Mã số thuế"]]
             save_json_file(WATCHLIST_FILE, watchlist)
-            st.success("✅ Đã xoá khỏi danh sách")
+            st.success("✅ Đã xoá DN khỏi danh sách")
             st.rerun()
-
-        st.download_button("💾 Tải Excel", df_watch.to_csv(index=False).encode("utf-8"), "theo_doi.csv")
     else:
         st.info("📭 Danh sách theo dõi trống")
 
 def quan_ly_user_tab():
     st.header("👑 Quản lý người dùng")
     users = load_users()
-    st.subheader(f"📋 Danh sách user (👥 Tổng: {len(users)})")
+    st.subheader(f"📋 Danh sách user ({len(users)} tài khoản)")
     st.table(pd.DataFrame(list(users.keys()), columns=["Tên đăng nhập"]))
 
     st.subheader("➕ Thêm user mới")
@@ -239,28 +207,25 @@ def quan_ly_user_tab():
     st.subheader("🗑 Xoá user")
     user_to_delete = st.selectbox("Chọn user để xoá", [u for u in users.keys() if u != "admin"])
     if st.button("Xoá user"):
-        if user_to_delete == "admin":
-            st.warning("⚠️ Không thể xoá user admin")
-        else:
-            users.pop(user_to_delete)
-            save_json_file(USERS_FILE, users)
-            st.success(f"✅ Đã xoá user {user_to_delete}")
-            st.rerun()
+        users.pop(user_to_delete)
+        save_json_file(USERS_FILE, users)
+        st.success(f"✅ Đã xoá user {user_to_delete}")
+        st.rerun()
 
 # ==============================
 # MAIN APP
 def main_app():
     st.sidebar.title(f"Xin chào, {st.session_state['username']}")
-    pages = ["Tra cứu doanh nghiệp", "Theo dõi doanh nghiệp"]
+    pages = ["📊 Tra cứu DN", "👁️ Theo dõi DN"]
     if st.session_state["username"] == "admin":
-        pages.append("Quản lý người dùng")
+        pages.append("👑 Quản lý user")
     page = st.sidebar.radio("📂 Menu", pages)
 
-    if page == "Tra cứu doanh nghiệp":
+    if page == "📊 Tra cứu DN":
         tra_cuu_tab()
-    elif page == "Theo dõi doanh nghiệp":
+    elif page == "👁️ Theo dõi DN":
         theo_doi_tab()
-    elif page == "Quản lý người dùng":
+    elif page == "👑 Quản lý user":
         quan_ly_user_tab()
 
     if st.sidebar.button("🚪 Đăng xuất"):
