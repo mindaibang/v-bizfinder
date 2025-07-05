@@ -92,7 +92,7 @@ def fetch_new_companies(pages=5):
         except Exception as e:
             st.error(f"⚠️ Lỗi khi tải trang {page}: {e}")
     df = pd.DataFrame(rows)
-    df.index += 1  # Đánh STT từ 1
+    df.index += 1  # STT từ 1
     return df
 
 def fetch_company_details(link):
@@ -136,6 +136,8 @@ def show_login():
 
 def tra_cuu_tab():
     st.header("📊 Tra cứu doanh nghiệp mới thành lập")
+    st.markdown("_Tác giả: **Ngô Thị Thơm - VietinBank CN Bảo Lộc - 0919026552**; lync: **thom.nt**_")
+    st.markdown("💙 *Dành tặng riêng cho các VietinBanker*")
 
     if st.button("🔍 Tra cứu 5 trang mới nhất"):
         st.info("⏳ Đang tải dữ liệu...")
@@ -170,6 +172,7 @@ def tra_cuu_tab():
                 if any(item['Link'] == selected_row['Link'] for item in watchlist):
                     st.info("✅ Doanh nghiệp đã có trong danh sách theo dõi.")
                 else:
+                    selected_row["Ghi chú"] = ""
                     watchlist.append(selected_row.to_dict())
                     save_json_file(watchlist_file, watchlist)
                     st.success("✅ Đã thêm vào danh sách theo dõi.")
@@ -182,6 +185,35 @@ def theo_doi_tab():
         df = pd.DataFrame(watchlist).drop(columns=["Link"])
         df.index += 1
         st.dataframe(df, use_container_width=True)
+
+        selected_idx = st.number_input("Nhập STT doanh nghiệp để thao tác", min_value=1, max_value=len(df), step=1)
+        selected_row = df.iloc[selected_idx - 1]
+
+        st.text_area("📝 Ghi chú", value=selected_row.get("Ghi chú", ""), key=f"note_{selected_idx}", height=100)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("💾 Lưu ghi chú"):
+                watchlist[selected_idx - 1]["Ghi chú"] = st.session_state[f"note_{selected_idx}"]
+                save_json_file(watchlist_file, watchlist)
+                st.success("✅ Đã lưu ghi chú.")
+        with col2:
+            if st.button("✏️ Sửa thông tin"):
+                new_name = st.text_input("🏢 Sửa tên DN", selected_row["Tên doanh nghiệp"])
+                new_mst = st.text_input("🆔 Sửa mã số thuế", selected_row["Mã số thuế"])
+                new_addr = st.text_input("📍 Sửa địa chỉ", selected_row["Địa chỉ"])
+                if st.button("💾 Lưu chỉnh sửa"):
+                    watchlist[selected_idx - 1]["Tên doanh nghiệp"] = new_name
+                    watchlist[selected_idx - 1]["Mã số thuế"] = new_mst
+                    watchlist[selected_idx - 1]["Địa chỉ"] = new_addr
+                    save_json_file(watchlist_file, watchlist)
+                    st.success("✅ Đã lưu chỉnh sửa.")
+                    st.rerun()
+        with col3:
+            if st.button("🗑 Xoá doanh nghiệp"):
+                watchlist.pop(selected_idx - 1)
+                save_json_file(watchlist_file, watchlist)
+                st.success("✅ Đã xoá khỏi danh sách.")
+                st.rerun()
     else:
         st.info("📭 Danh sách theo dõi trống.")
 
