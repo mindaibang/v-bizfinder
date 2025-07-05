@@ -6,14 +6,14 @@ import bcrypt
 import json
 import os
 
-# ===========================
-# CONFIG
+# ========== CONFIG ==========
 BASE_URL = "https://masothue.com"
 USERS_FILE = "users.json"
-WATCHLIST_FILE = "watchlist.json"
+WATCHLIST_DIR = "watchlists"
+if not os.path.exists(WATCHLIST_DIR):
+    os.makedirs(WATCHLIST_DIR)
 
-# ===========================
-# AUTHENTICATION
+# ========== AUTH ==========
 def load_users():
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, "r", encoding="utf-8") as f:
@@ -26,8 +26,7 @@ def load_users():
 def verify_user(username, password):
     users = load_users()
     if username in users:
-        hashed_pw = users[username].encode("utf-8")
-        return bcrypt.checkpw(password.encode(), hashed_pw)
+        return bcrypt.checkpw(password.encode(), users[username].encode())
     return False
 
 def save_json_file(filename, data):
@@ -40,11 +39,13 @@ def load_json_file(filename):
             return json.load(f)
     return []
 
-# ===========================
-# FETCH DATA
+def get_watchlist_file(username):
+    return os.path.join(WATCHLIST_DIR, f"watchlist_{username}.json")
+
+# ========== FETCH ==========
 def fetch_new_companies(pages=5):
     """
-    Crawl các trang mới nhất
+    Crawl 5 trang mới nhất
     """
     rows = []
     headers = {
@@ -65,16 +66,15 @@ def fetch_new_companies(pages=5):
                 a_tag = div.find("a")
                 addr_tag = div.find("address")
                 tax_code = div.get("data-prefetch").split("-")[0]
-
                 if a_tag and addr_tag:
                     name = a_tag.get_text(strip=True)
                     link = BASE_URL + a_tag['href']
                     address = addr_tag.get_text(strip=True)
                     rows.append({
                         "Tên doanh nghiệp": name,
-                        "Mã số thuế": tax_code.lstrip("/"),
+                        "Mã số thuế": tax_code,
                         "Địa chỉ": address,
-                        "Link": link
+                        "Link": link  # ẩn trong bảng nhưng dùng để fetch chi tiết
                     })
         except Exception as e:
             st.error(f"⚠️ Lỗi khi tải trang {page}: {e}")
@@ -82,7 +82,7 @@ def fetch_new_companies(pages=5):
 
 def fetch_company_details(link):
     """
-    Crawl trang chi tiết doanh nghiệp
+    Lấy thông tin chi tiết DN từ link
     """
     headers = {
         "User-Agent": (
@@ -98,8 +98,7 @@ def fetch_company_details(link):
         soup = BeautifulSoup(resp.text, "html.parser")
         table = soup.select_one("table.table-taxinfo")
         if table:
-            rows = table.select("tr")
-            for row in rows:
+            for row in table.select("tr"):
                 cols = row.select("td")
                 if len(cols) == 2:
                     key = cols[0].get_text(strip=True)
@@ -109,8 +108,7 @@ def fetch_company_details(link):
         st.error(f"⚠️ Lỗi khi tải chi tiết: {e}")
     return details
 
-# ===========================
-# UI COMPONENTS
+# ========== UI ==========
 def show_login():
     st.title("🔒 Đăng nhập")
     username = st.text_input("Tên đăng nhập")
@@ -138,44 +136,36 @@ def tra_cuu_tab():
 
     if "search_results" in st.session_state:
         df = st.session_state["search_results"]
-        st.subheader("📋 Kết quả tìm kiếm")
-
-        # Bỏ cột Link khỏi bảng hiển thị
-        display_df = df.drop(columns=["Link"])
-        selected_index = st.selectbox(
-            "📌 Chọn dòng doanh nghiệp:",
-            display_df.index,
-            format_func=lambda x: display_df.loc[x, "Tên doanh nghiệp"]
-        )
-
-        st.dataframe(display_df, use_container_width=True)
+        df_display = df.drop(columns=["Link"])
+        selected_idx = st.selectbox("📌 Chọn doanh nghiệp", df_display["Tên doanh nghiệp"])
+        selected_row = df[df["Tên doanh nghiệp"] == selected_idx].iloc[0]
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("📄 Xem chi tiết"):
-                details = fetch_company_details(df.loc[selected_index, "Link"])
-                st.write(f"### 📄 Chi tiết: {df.loc[selected_index, 'Tên doanh nghiệp']}")
+            if st.button("📄 Chi tiết"):
+                details = fetch_company_details(selected_row["Link"])
+                st.subheader(f"📄 Chi tiết: {selected_row['Tên doanh nghiệp']}")
                 st.json(details)
         with col2:
             if st.button("⭐ Thêm vào theo dõi"):
-                watchlist = load_json_file(WATCHLIST_FILE)
-                selected_row = df.loc[selected_index].to_dict()
-                if any(w['Link'] == selected_row['Link'] for w in watchlist):
-                    st.info("✅ Doanh nghiệp đã trong danh sách theo dõi.")
+                watchlist_file = get_watchlist_file(st.session_state["username"])
+                watchlist = load_json_file(watchlist_file)
+                if any(item['Link'] == selected_row['Link'] for item in watchlist):
+                    st.info("✅ Doanh nghiệp đã có trong danh sách theo dõi.")
                 else:
-                    watchlist.append(selected_row)
-                    save_json_file(WATCHLIST_FILE, watchlist)
+                    watchlist.append(selected_row.to_dict())
+                    save_json_file(watchlist_file, watchlist)
                     st.success("✅ Đã thêm vào danh sách theo dõi.")
+
+        st.dataframe(df_display, use_container_width=True)
 
 def theo_doi_tab():
     st.header("👁️ Theo dõi doanh nghiệp")
-    watchlist = load_json_file(WATCHLIST_FILE)
+    watchlist_file = get_watchlist_file(st.session_state["username"])
+    watchlist = load_json_file(watchlist_file)
     if watchlist:
         df = pd.DataFrame(watchlist).drop(columns=["Link"])
         st.dataframe(df, use_container_width=True)
-        if st.button("🗑 Xoá toàn bộ theo dõi"):
-            save_json_file(WATCHLIST_FILE, [])
-            st.success("✅ Đã xoá toàn bộ danh sách theo dõi.")
     else:
         st.info("📭 Danh sách theo dõi trống.")
 
@@ -185,8 +175,35 @@ def quan_ly_user_tab():
     st.subheader(f"📋 Danh sách user (Tổng: {len(users)})")
     st.table(pd.DataFrame(list(users.keys()), columns=["Tên đăng nhập"]))
 
-# ===========================
-# MAIN APP
+    st.subheader("➕ Thêm user mới")
+    new_user = st.text_input("Tên đăng nhập mới")
+    new_pass = st.text_input("Mật khẩu mới", type="password")
+    if st.button("Thêm user"):
+        if new_user in users:
+            st.warning("⚠️ User đã tồn tại.")
+        else:
+            hashed_pw = bcrypt.hashpw(new_pass.encode(), bcrypt.gensalt()).decode()
+            users[new_user] = hashed_pw
+            save_json_file(USERS_FILE, users)
+            st.success(f"✅ Đã thêm user {new_user}.")
+
+    st.subheader("🔑 Reset mật khẩu user")
+    target_user = st.selectbox("Chọn user", list(users.keys()))
+    if st.button("Reset mật khẩu"):
+        new_hash = bcrypt.hashpw("123456".encode(), bcrypt.gensalt()).decode()
+        users[target_user] = new_hash
+        save_json_file(USERS_FILE, users)
+        st.success(f"✅ Đã reset mật khẩu user {target_user} về mặc định (123456).")
+
+    st.subheader("🗑 Xóa user")
+    user_to_delete = st.selectbox("Chọn user để xoá", [u for u in users if u != "admin"])
+    if st.button("Xoá user"):
+        users.pop(user_to_delete)
+        save_json_file(USERS_FILE, users)
+        st.success(f"✅ Đã xoá user {user_to_delete}.")
+        st.rerun()
+
+# ========== MAIN APP ==========
 def main_app():
     st.sidebar.title(f"Xin chào, {st.session_state['username']}")
     pages = ["Tra cứu doanh nghiệp", "Theo dõi doanh nghiệp"]
@@ -205,8 +222,7 @@ def main_app():
         st.session_state.clear()
         st.rerun()
 
-# ===========================
-# ENTRY POINT
+# ========== ENTRY POINT ==========
 if "logged_in" not in st.session_state:
     show_login()
 else:
