@@ -144,7 +144,7 @@ def tra_cuu_tab():
         else:
             df.index += 1
             st.session_state["search_results"] = df
-            st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp mới.")
+            st.success(f"✅ Đã tìm thấy {len(df)} DN mới.")
 
     if "search_results" in st.session_state:
         df = st.session_state["search_results"]
@@ -235,6 +235,21 @@ def quan_ly_user_tab():
                 added_count += 1
         save_json_file(USERS_FILE, users)
         st.success(f"✅ Đã thêm {added_count} user mới từ file.")
+
+    st.subheader("🔑 Reset mật khẩu")
+    target_user = st.selectbox("Chọn user", list(users.keys()))
+    if st.button("Reset mật khẩu về mặc định"):
+        users[target_user] = bcrypt.hashpw("123456".encode(), bcrypt.gensalt()).decode()
+        save_json_file(USERS_FILE, users)
+        st.success(f"✅ Đã reset mật khẩu user {target_user} về 123456.")
+
+    st.subheader("🗑 Xoá user")
+    user_to_delete = st.selectbox("Chọn user để xoá", [u for u in users if u != "admin"])
+    if st.button("Xoá user"):
+        users.pop(user_to_delete)
+        save_json_file(USERS_FILE, users)
+        st.success(f"✅ Đã xoá user {user_to_delete}.")
+        st.rerun()
 
 def huong_dan_tab():
     st.header("📖 Hướng dẫn sử dụng")
