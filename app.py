@@ -13,6 +13,21 @@ USERS_FILE = "users.json"
 WATCHLIST_FILE = "watchlist.json"
 HISTORY_FILE = "history.json"
 
+PROVINCES = [
+    "Tất cả", "An Giang", "Bà Rịa - Vũng Tàu", "Bắc Giang", "Bắc Kạn", "Bạc Liêu",
+    "Bắc Ninh", "Bến Tre", "Bình Định", "Bình Dương", "Bình Phước",
+    "Bình Thuận", "Cà Mau", "Cần Thơ", "Cao Bằng", "Đà Nẵng", "Đắk Lắk",
+    "Đắk Nông", "Điện Biên", "Đồng Nai", "Đồng Tháp", "Gia Lai", "Hà Giang",
+    "Hà Nam", "Hà Nội", "Hà Tĩnh", "Hải Dương", "Hải Phòng", "Hậu Giang",
+    "Hòa Bình", "Hưng Yên", "Khánh Hòa", "Kiên Giang", "Kon Tum", "Lai Châu",
+    "Lâm Đồng", "Lạng Sơn", "Lào Cai", "Long An", "Nam Định", "Nghệ An",
+    "Ninh Bình", "Ninh Thuận", "Phú Thọ", "Phú Yên", "Quảng Bình", "Quảng Nam",
+    "Quảng Ngãi", "Quảng Ninh", "Quảng Trị", "Sóc Trăng", "Sơn La", "Tây Ninh",
+    "Thái Bình", "Thái Nguyên", "Thanh Hóa", "Thừa Thiên Huế", "Tiền Giang",
+    "TP. Hồ Chí Minh", "Trà Vinh", "Tuyên Quang", "Vĩnh Long", "Vĩnh Phúc",
+    "Yên Bái"
+]
+
 # ===========================
 # AUTHENTICATION
 
@@ -46,24 +61,35 @@ def load_json_file(filename):
 # FETCH DATA
 
 def fetch_new_companies(pages=5):
+    """
+    Crawl 5 trang mới nhất và lấy đầy đủ thông tin
+    """
     rows = []
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        )
+    }
     for page in range(1, pages + 1):
         url = f"{BASE_URL}/tra-cuu-ma-so-thue-doanh-nghiep-moi-thanh-lap?page={page}"
         try:
-            resp = requests.get(url, timeout=10)
+            resp = requests.get(url, headers=headers, timeout=10)
+            resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
             listings = soup.select("div.tax-listing div[data-prefetch]")
             for div in listings:
                 a_tag = div.find("a")
                 addr_tag = div.find("address")
-                mst_tag = div.find("span", class_="tax-code")
-                rep_tag = div.find("span", class_="tax-represent")
+                tax_code_tag = div.find("div", class_="tax-code")  # Mã số thuế
+                rep_tag = div.find("span", class_="tax-represent")  # Người đại diện
 
-                if a_tag and addr_tag and mst_tag:
+                if a_tag and addr_tag:
                     name = a_tag.get_text(strip=True)
                     link = BASE_URL + a_tag['href']
                     address = addr_tag.get_text(strip=True)
-                    tax_code = mst_tag.get_text(strip=True)
+                    tax_code = tax_code_tag.get_text(strip=True) if tax_code_tag else ""
                     representative = rep_tag.get_text(strip=True) if rep_tag else ""
 
                     rows.append({
@@ -75,6 +101,7 @@ def fetch_new_companies(pages=5):
                     })
         except Exception as e:
             st.error(f"⚠️ Lỗi khi tải trang {page}: {e}")
+
     return pd.DataFrame(rows)
 
 # ===========================
@@ -95,33 +122,35 @@ def show_login():
 
 def tra_cuu_tab():
     st.header("📊 Tra cứu doanh nghiệp mới thành lập")
-    
-    if st.button("🔍 Tra cứu 5 trang mới nhất"):
-        st.info("⏳ Đang tải dữ liệu...")
+
+    if st.button("🔍 Tra cứu"):
+        st.info("⏳ Đang tải dữ liệu (5 trang)...")
         df = fetch_new_companies()
         if df.empty:
             st.warning("⚠️ Không tìm thấy dữ liệu.")
         else:
             st.session_state["search_results"] = df
-            save_json_file(HISTORY_FILE, df.to_dict(orient="records"))
             st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp mới.")
 
-    # Hiển thị kết quả tìm kiếm
     if "search_results" in st.session_state:
         df = st.session_state["search_results"]
-        st.subheader("📋 Kết quả tìm kiếm")
-        st.dataframe(df, use_container_width=True)
+        province_filter = st.selectbox("📍 Lọc theo tỉnh/TP", PROVINCES)
+        if province_filter != "Tất cả":
+            df_filtered = df[df["Địa chỉ"].str.contains(province_filter, case=False, na=False)]
+        else:
+            df_filtered = df
 
-        for idx, row in df.iterrows():
-            col1, col2 = st.columns([3,1])
+        st.dataframe(df_filtered, use_container_width=True)
+
+        for idx, row in df_filtered.iterrows():
+            col1, col2 = st.columns([4, 1])
             with col1:
                 st.markdown(f"**{row['Tên doanh nghiệp']}**")
-                st.markdown(f"🆔 {row['Mã số thuế']}")
-                if row['Người đại diện']:
-                    st.markdown(f"👤 {row['Người đại diện']}")
-                st.markdown(f"📍 {row['Địa chỉ']}")
+                st.markdown(f"💼 **Mã số thuế**: {row['Mã số thuế']}")
+                st.markdown(f"👤 **Người đại diện**: {row['Người đại diện']}")
+                st.markdown(f"📍 **Địa chỉ**: {row['Địa chỉ']}")
             with col2:
-                if st.button(f"🔗 Xem chi tiết #{idx}"):
+                if st.button(f"🔗 Chi tiết #{idx}"):
                     js = f"window.open('{row['Link']}')"
                     st.components.v1.html(f"<script>{js}</script>", height=0)
                 if st.button(f"⭐ Theo dõi #{idx}"):
@@ -132,15 +161,6 @@ def tra_cuu_tab():
                         watchlist.append(row.to_dict())
                         save_json_file(WATCHLIST_FILE, watchlist)
                         st.success("✅ Đã thêm vào danh sách theo dõi.")
-
-    # Hiển thị lịch sử tìm kiếm
-    st.subheader("🕑 Lịch sử tìm kiếm")
-    history = load_json_file(HISTORY_FILE)
-    if history:
-        df_hist = pd.DataFrame(history)
-        st.dataframe(df_hist, use_container_width=True)
-    else:
-        st.info("📭 Chưa có lịch sử tìm kiếm.")
 
 def theo_doi_tab():
     st.header("👁️ Theo dõi doanh nghiệp")
