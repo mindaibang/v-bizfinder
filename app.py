@@ -59,9 +59,6 @@ def get_watchlist_file(username):
 
 # ========== FETCH ==========
 def fetch_new_companies(pages=5):
-    """
-    Crawl 5 trang mới nhất (~125 DN)
-    """
     rows = []
     headers = {
         "User-Agent": (
@@ -89,16 +86,14 @@ def fetch_new_companies(pages=5):
                         "Tên doanh nghiệp": name,
                         "Mã số thuế": tax_code,
                         "Địa chỉ": address,
-                        "Link": link
+                        "Link": link,
+                        "Ghi chú": ""
                     })
         except Exception as e:
             st.error(f"⚠️ Lỗi khi tải trang {page}: {e}")
     return pd.DataFrame(rows)
 
 def fetch_company_details(link):
-    """
-    Crawl trang chi tiết DN
-    """
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -147,7 +142,7 @@ def tra_cuu_tab():
         if df.empty:
             st.warning("⚠️ Không tìm thấy dữ liệu.")
         else:
-            df.index += 1  # STT từ 1
+            df.index += 1
             st.session_state["search_results"] = df
             st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp mới.")
 
@@ -156,7 +151,6 @@ def tra_cuu_tab():
         province_filter = st.selectbox("📍 Lọc theo tỉnh/TP", PROVINCES)
         if province_filter != "Tất cả":
             df = df[df["Địa chỉ"].str.contains(province_filter, case=False, na=False)]
-
         st.dataframe(df[["Tên doanh nghiệp", "Mã số thuế", "Địa chỉ"]], use_container_width=True)
 
         selected_idx = st.number_input("Nhập STT DN để xem chi tiết", min_value=1, max_value=len(df), step=1)
@@ -185,7 +179,27 @@ def theo_doi_tab():
     if watchlist:
         df = pd.DataFrame(watchlist)
         df.index += 1
-        st.dataframe(df[["Tên doanh nghiệp", "Mã số thuế", "Địa chỉ"]], use_container_width=True)
+        st.dataframe(df[["Tên doanh nghiệp", "Mã số thuế", "Địa chỉ", "Ghi chú"]], use_container_width=True)
+
+        selected_idx = st.number_input("Nhập STT DN để thao tác", min_value=1, max_value=len(df), step=1)
+        selected_row = df.iloc[selected_idx - 1]
+
+        note = st.text_area("📝 Ghi chú", value=selected_row.get("Ghi chú", ""), height=100)
+        if st.button("💾 Lưu ghi chú"):
+            watchlist[selected_idx - 1]["Ghi chú"] = note
+            save_json_file(watchlist_file, watchlist)
+            st.success("✅ Đã lưu ghi chú.")
+
+        if st.button("📄 Xem chi tiết DN"):
+            details = fetch_company_details(selected_row["Link"])
+            st.subheader(f"📄 Chi tiết: {selected_row['Tên doanh nghiệp']}")
+            st.table(pd.DataFrame(details.items(), columns=["Thông tin", "Giá trị"]))
+
+        if st.button("🗑 Xoá doanh nghiệp"):
+            watchlist.pop(selected_idx - 1)
+            save_json_file(watchlist_file, watchlist)
+            st.success("✅ Đã xoá DN khỏi danh sách.")
+            st.rerun()
     else:
         st.info("📭 Danh sách theo dõi trống.")
 
@@ -207,13 +221,20 @@ def quan_ly_user_tab():
             save_json_file(USERS_FILE, users)
             st.success(f"✅ Đã thêm user {new_user}.")
 
-    st.subheader("🗑 Xóa user")
-    user_to_delete = st.selectbox("Chọn user để xoá", [u for u in users if u != "admin"])
-    if st.button("Xoá user"):
-        users.pop(user_to_delete)
+    st.subheader("📤 Thêm user theo lô")
+    uploaded_file = st.file_uploader("📥 Upload file Excel (2 cột: username, password)", type=["xlsx", "csv"])
+    if uploaded_file and st.button("Thêm user từ file"):
+        df_users = pd.read_excel(uploaded_file) if uploaded_file.name.endswith(".xlsx") else pd.read_csv(uploaded_file)
+        added_count = 0
+        for _, row in df_users.iterrows():
+            uname = row["username"]
+            upass = row["password"]
+            if uname not in users:
+                hashed_pw = bcrypt.hashpw(upass.encode(), bcrypt.gensalt()).decode()
+                users[uname] = hashed_pw
+                added_count += 1
         save_json_file(USERS_FILE, users)
-        st.success(f"✅ Đã xoá user {user_to_delete}.")
-        st.rerun()
+        st.success(f"✅ Đã thêm {added_count} user mới từ file.")
 
 def huong_dan_tab():
     st.header("📖 Hướng dẫn sử dụng")
@@ -221,9 +242,12 @@ def huong_dan_tab():
     ✅ **Tra cứu DN mới**: Bấm *Tra cứu* để lấy danh sách DN mới thành lập (update mỗi ngày).  
     ✅ **Lọc theo tỉnh**: Dùng dropdown lọc theo tỉnh sau khi tra cứu.  
     ✅ **Thêm vào theo dõi**: Chọn DN -> Bấm *Thêm vào theo dõi*.  
-    ✅ **Quản lý user**: Admin có thể thêm/xoá/reset mật khẩu user.  
+    ✅ **Ghi chú**: Bạn có thể thêm ghi chú riêng cho từng DN.  
+    ✅ **Quản lý user**: Admin có thể thêm, xoá hoặc reset mật khẩu user.  
+    ✅ **Thêm user theo lô**: Cho phép upload file Excel hoặc CSV để thêm nhiều user 1 lần.  
+
+    💡 *Danh sách DN mới được cập nhật liên tục, bạn nên vào lấy mỗi ngày để không bỏ lỡ khách hàng tiềm năng.*
     """)
-    st.info("💡 *Danh sách DN mới được cập nhật liên tục, bạn nên vào lấy mỗi ngày!*")
 
 # ========== MAIN ==========
 def main_app():
