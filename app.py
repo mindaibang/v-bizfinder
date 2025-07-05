@@ -14,20 +14,6 @@ WATCHLIST_DIR = "watchlists"
 if not os.path.exists(WATCHLIST_DIR):
     os.makedirs(WATCHLIST_DIR)
 
-PROVINCES = [
-    "Tất cả", "An Giang", "Bà Rịa - Vũng Tàu", "Bắc Giang", "Bắc Kạn", "Bạc Liêu",
-    "Bắc Ninh", "Bến Tre", "Bình Định", "Bình Dương", "Bình Phước", "Bình Thuận",
-    "Cà Mau", "Cần Thơ", "Cao Bằng", "Đà Nẵng", "Đắk Lắk", "Đắk Nông", "Điện Biên",
-    "Đồng Nai", "Đồng Tháp", "Gia Lai", "Hà Giang", "Hà Nam", "Hà Nội", "Hà Tĩnh",
-    "Hải Dương", "Hải Phòng", "Hậu Giang", "Hòa Bình", "Hưng Yên", "Khánh Hòa",
-    "Kiên Giang", "Kon Tum", "Lai Châu", "Lâm Đồng", "Lạng Sơn", "Lào Cai",
-    "Long An", "Nam Định", "Nghệ An", "Ninh Bình", "Ninh Thuận", "Phú Thọ",
-    "Phú Yên", "Quảng Bình", "Quảng Nam", "Quảng Ngãi", "Quảng Ninh", "Quảng Trị",
-    "Sóc Trăng", "Sơn La", "Tây Ninh", "Thái Bình", "Thái Nguyên", "Thanh Hóa",
-    "Thừa Thiên Huế", "Tiền Giang", "TP. Hồ Chí Minh", "Trà Vinh", "Tuyên Quang",
-    "Vĩnh Long", "Vĩnh Phúc", "Yên Bái"
-]
-
 # ========== AUTH ==========
 def load_users():
     if os.path.exists(USERS_FILE):
@@ -133,10 +119,9 @@ def show_login():
             st.error("❌ Sai tên đăng nhập hoặc mật khẩu")
 
 def tra_cuu_tab():
-    st.title("📊 Tra cứu DN mới (Tác giả: Ngô Thị Thơm – VietinBank CN Bảo Lộc – 0919026552)")
-    st.markdown("Dành tặng riêng cho các VietinBanker. *Danh sách DN mới được cập nhật liên tục.*")
+    st.header("📊 Tra cứu doanh nghiệp mới thành lập")
 
-    if st.button("🔍 Tra cứu DN mới (5 trang)"):
+    if st.button("🔍 Tra cứu 5 trang mới nhất"):
         st.info("⏳ Đang tải dữ liệu...")
         df = fetch_new_companies()
         if df.empty:
@@ -144,13 +129,10 @@ def tra_cuu_tab():
         else:
             df.index += 1
             st.session_state["search_results"] = df
-            st.success(f"✅ Đã tìm thấy {len(df)} DN mới.")
+            st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp mới.")
 
     if "search_results" in st.session_state:
         df = st.session_state["search_results"]
-        province_filter = st.selectbox("📍 Lọc theo tỉnh/TP", PROVINCES)
-        if province_filter != "Tất cả":
-            df = df[df["Địa chỉ"].str.contains(province_filter, case=False, na=False)]
         st.dataframe(df[["Tên doanh nghiệp", "Mã số thuế", "Địa chỉ"]], use_container_width=True)
 
         selected_idx = st.number_input("Nhập STT DN để xem chi tiết", min_value=1, max_value=len(df), step=1)
@@ -158,8 +140,9 @@ def tra_cuu_tab():
 
         if st.button("📄 Xem chi tiết DN"):
             details = fetch_company_details(selected_row["Link"])
-            st.subheader(f"📄 Chi tiết: {selected_row['Tên doanh nghiệp']}")
-            st.table(pd.DataFrame(details.items(), columns=["Thông tin", "Giá trị"]))
+            with st.expander(f"📄 Chi tiết: {selected_row['Tên doanh nghiệp']}", expanded=True):
+                for k, v in details.items():
+                    st.markdown(f"**{k}**: {v}")
 
         if st.button("⭐ Thêm vào theo dõi"):
             watchlist_file = get_watchlist_file(st.session_state["username"])
@@ -192,8 +175,9 @@ def theo_doi_tab():
 
         if st.button("📄 Xem chi tiết DN"):
             details = fetch_company_details(selected_row["Link"])
-            st.subheader(f"📄 Chi tiết: {selected_row['Tên doanh nghiệp']}")
-            st.table(pd.DataFrame(details.items(), columns=["Thông tin", "Giá trị"]))
+            with st.expander(f"📄 Chi tiết: {selected_row['Tên doanh nghiệp']}", expanded=True):
+                for k, v in details.items():
+                    st.markdown(f"**{k}**: {v}")
 
         if st.button("🗑 Xoá doanh nghiệp"):
             watchlist.pop(selected_idx - 1)
@@ -206,7 +190,6 @@ def theo_doi_tab():
 def quan_ly_user_tab():
     st.header("👑 Quản lý người dùng")
     users = load_users()
-    st.subheader(f"📋 Danh sách user (Tổng: {len(users)})")
     st.table(pd.DataFrame(list(users.keys()), columns=["Tên đăng nhập"]))
 
     st.subheader("➕ Thêm user mới")
@@ -220,21 +203,6 @@ def quan_ly_user_tab():
             users[new_user] = hashed_pw
             save_json_file(USERS_FILE, users)
             st.success(f"✅ Đã thêm user {new_user}.")
-
-    st.subheader("📤 Thêm user theo lô")
-    uploaded_file = st.file_uploader("📥 Upload file Excel (2 cột: username, password)", type=["xlsx", "csv"])
-    if uploaded_file and st.button("Thêm user từ file"):
-        df_users = pd.read_excel(uploaded_file) if uploaded_file.name.endswith(".xlsx") else pd.read_csv(uploaded_file)
-        added_count = 0
-        for _, row in df_users.iterrows():
-            uname = row["username"]
-            upass = row["password"]
-            if uname not in users:
-                hashed_pw = bcrypt.hashpw(upass.encode(), bcrypt.gensalt()).decode()
-                users[uname] = hashed_pw
-                added_count += 1
-        save_json_file(USERS_FILE, users)
-        st.success(f"✅ Đã thêm {added_count} user mới từ file.")
 
     st.subheader("🔑 Reset mật khẩu")
     target_user = st.selectbox("Chọn user", list(users.keys()))
@@ -257,20 +225,17 @@ def huong_dan_tab():
     ✅ **Tra cứu DN mới**: Bấm *Tra cứu* để lấy danh sách DN mới thành lập (update mỗi ngày).  
     ✅ **Lọc theo tỉnh**: Dùng dropdown lọc theo tỉnh sau khi tra cứu.  
     ✅ **Thêm vào theo dõi**: Chọn DN -> Bấm *Thêm vào theo dõi*.  
-    ✅ **Ghi chú**: Bạn có thể thêm ghi chú riêng cho từng DN.  
     ✅ **Quản lý user**: Admin có thể thêm, xoá hoặc reset mật khẩu user.  
-    ✅ **Thêm user theo lô**: Cho phép upload file Excel hoặc CSV để thêm nhiều user 1 lần.  
-
-    💡 *Danh sách DN mới được cập nhật liên tục, bạn nên vào lấy mỗi ngày để không bỏ lỡ khách hàng tiềm năng.*
+    💡 *Danh sách DN mới được cập nhật liên tục, bạn nên vào lấy mỗi ngày.*
     """)
 
 # ========== MAIN ==========
 def main_app():
     st.sidebar.title(f"Xin chào, {st.session_state['username']}")
-    pages = ["Tra cứu DN mới", "Theo dõi doanh nghiệp", "Quản lý người dùng", "Hướng dẫn"]
+    pages = ["Tra cứu doanh nghiệp", "Theo dõi doanh nghiệp", "Quản lý người dùng", "Hướng dẫn"]
     page = st.sidebar.radio("📂 Menu", pages)
 
-    if page == "Tra cứu DN mới":
+    if page == "Tra cứu doanh nghiệp":
         tra_cuu_tab()
     elif page == "Theo dõi doanh nghiệp":
         theo_doi_tab()
