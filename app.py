@@ -5,7 +5,6 @@ from bs4 import BeautifulSoup
 import bcrypt
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
 
 # ===========================
 # CONFIG
@@ -59,7 +58,7 @@ def load_json_file(filename):
 
 # ===========================
 # FETCH DATA
-def fetch_new_companies(province="Tất cả", pages=5):
+def fetch_new_companies(pages=5):
     """
     Crawl danh sách DN mới thành lập
     """
@@ -77,12 +76,11 @@ def fetch_new_companies(province="Tất cả", pages=5):
                     name = a_tag.get_text(strip=True)
                     link = BASE_URL + a_tag['href']
                     address = addr_tag.get_text(strip=True)
-                    if province == "Tất cả" or province.lower() in address.lower():
-                        rows.append({
-                            "Tên doanh nghiệp": name,
-                            "Địa chỉ": address,
-                            "Link": link
-                        })
+                    rows.append({
+                        "Tên doanh nghiệp": name,
+                        "Địa chỉ": address,
+                        "Link": link
+                    })
         except Exception as e:
             st.error(f"⚠️ Lỗi khi tải trang {page}: {e}")
     return pd.DataFrame(rows)
@@ -104,20 +102,23 @@ def show_login():
 
 def tra_cuu_tab():
     st.header("📊 Tra cứu doanh nghiệp mới thành lập")
-    province = st.selectbox("Chọn tỉnh/TP", PROVINCES)
-    if st.button("🔍 Tra cứu 5 trang mới nhất"):
+    if st.button("🔍 Tra cứu"):
         st.info("⏳ Đang tải dữ liệu...")
-        df = fetch_new_companies(province)
+        df = fetch_new_companies()
         if df.empty:
             st.warning("⚠️ Không tìm thấy dữ liệu.")
         else:
             st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp.")
+            # Dropdown lọc tỉnh
+            province_filter = st.selectbox("Lọc theo tỉnh/TP", PROVINCES)
+            if province_filter != "Tất cả":
+                df = df[df["Địa chỉ"].str.contains(province_filter, case=False, na=False)]
             st.dataframe(df, use_container_width=True)
 
             # Lưu lịch sử
             history = load_json_file(HISTORY_FILE)
-            history.insert(0, {"tỉnh": province, "số DN": len(df)})
-            save_json_file(HISTORY_FILE, history[:10])  # Chỉ giữ 10 dòng gần nhất
+            history.insert(0, {"Tìm kiếm": "Tất cả", "Số DN": len(df)})
+            save_json_file(HISTORY_FILE, history[:10])  # Giữ 10 dòng gần nhất
 
 def theo_doi_tab():
     st.header("👁️ Theo dõi doanh nghiệp")
