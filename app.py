@@ -45,7 +45,6 @@ def get_watchlist_file(username):
 
 # ========== FETCH ==========
 def fetch_new_companies(pages=5):
-    rows = []
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -53,6 +52,7 @@ def fetch_new_companies(pages=5):
             "Chrome/124.0.0.0 Safari/537.36"
         )
     }
+    rows = []
     for page in range(1, pages + 1):
         url = f"{BASE_URL}/tra-cuu-ma-so-thue-doanh-nghiep-moi-thanh-lap?page={page}"
         try:
@@ -63,14 +63,14 @@ def fetch_new_companies(pages=5):
             for div in listings:
                 a_tag = div.find("a")
                 addr_tag = div.find("address")
-                tax_code = div.get("data-prefetch").split("-")[0].strip("/")
+                tax_code = div.get("data-prefetch").split("-")[0]
                 if a_tag and addr_tag:
                     name = a_tag.get_text(strip=True)
                     link = BASE_URL + a_tag['href']
                     address = addr_tag.get_text(strip=True)
                     rows.append({
                         "Tên doanh nghiệp": name,
-                        "Mã số thuế": tax_code,
+                        "Mã số thuế": tax_code.strip("/"),
                         "Địa chỉ": address,
                         "Link": link,
                         "Ghi chú": ""
@@ -120,6 +120,7 @@ def show_login():
 
 def tra_cuu_tab():
     st.header("📊 Tra cứu doanh nghiệp mới thành lập")
+    st.markdown("*(Tác giả: Ngô Thị Thơm – VietinBank CN Bảo Lộc – 0919026552)*")
 
     if st.button("🔍 Tra cứu 5 trang mới nhất"):
         st.info("⏳ Đang tải dữ liệu...")
@@ -127,69 +128,91 @@ def tra_cuu_tab():
         if df.empty:
             st.warning("⚠️ Không tìm thấy dữ liệu.")
         else:
-            df.index += 1
             st.session_state["search_results"] = df
             st.success(f"✅ Đã tìm thấy {len(df)} doanh nghiệp mới.")
 
     if "search_results" in st.session_state:
         df = st.session_state["search_results"]
+
+        # Filter tỉnh
+        provinces = ["Tất cả"] + sorted(set(df["Địa chỉ"].str.extract(r", ([^,]+)$")[0].dropna().unique()))
+        province_filter = st.selectbox("📍 Lọc theo tỉnh/TP", provinces)
+        if province_filter != "Tất cả":
+            df = df[df["Địa chỉ"].str.contains(province_filter, case=False, na=False)]
+
         st.dataframe(df[["Tên doanh nghiệp", "Mã số thuế", "Địa chỉ"]], use_container_width=True)
 
-        selected_idx = st.number_input("Nhập STT DN để xem chi tiết", min_value=1, max_value=len(df), step=1)
+        selected_idx = st.number_input("Nhập STT để xem chi tiết hoặc theo dõi", min_value=1, max_value=len(df), step=1)
         selected_row = df.iloc[selected_idx - 1]
 
-        if st.button("📄 Xem chi tiết DN"):
-            details = fetch_company_details(selected_row["Link"])
-            with st.expander(f"📄 Chi tiết: {selected_row['Tên doanh nghiệp']}", expanded=True):
-                for k, v in details.items():
-                    st.markdown(f"**{k}**: {v}")
-
-        if st.button("⭐ Thêm vào theo dõi"):
-            watchlist_file = get_watchlist_file(st.session_state["username"])
-            watchlist = load_json_file(watchlist_file)
-            if any(w['Link'] == selected_row["Link"] for w in watchlist):
-                st.info("✅ DN đã có trong danh sách theo dõi.")
-            else:
-                watchlist.append(selected_row.to_dict())
-                save_json_file(watchlist_file, watchlist)
-                st.success("✅ Đã thêm vào danh sách theo dõi.")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📄 Xem chi tiết"):
+                details = fetch_company_details(selected_row["Link"])
+                with st.expander(f"📄 Chi tiết: {selected_row['Tên doanh nghiệp']}", expanded=True):
+                    for k, v in details.items():
+                        st.markdown(f"**{k}**: {v}")
+        with col2:
+            if st.button("⭐ Thêm vào theo dõi"):
+                watchlist_file = get_watchlist_file(st.session_state["username"])
+                watchlist = load_json_file(watchlist_file)
+                if any(item["Mã số thuế"] == selected_row["Mã số thuế"] for item in watchlist):
+                    st.info("✅ Doanh nghiệp đã có trong danh sách theo dõi.")
+                else:
+                    watchlist.append(selected_row.to_dict())
+                    save_json_file(watchlist_file, watchlist)
+                    st.success("✅ Đã thêm vào danh sách theo dõi.")
 
 def theo_doi_tab():
     st.header("👁️ Theo dõi doanh nghiệp")
     watchlist_file = get_watchlist_file(st.session_state["username"])
     watchlist = load_json_file(watchlist_file)
-
     if watchlist:
         df = pd.DataFrame(watchlist)
         df.index += 1
         st.dataframe(df[["Tên doanh nghiệp", "Mã số thuế", "Địa chỉ", "Ghi chú"]], use_container_width=True)
 
-        selected_idx = st.number_input("Nhập STT DN để thao tác", min_value=1, max_value=len(df), step=1)
+        selected_idx = st.number_input("Nhập STT để thao tác", min_value=1, max_value=len(df), step=1)
         selected_row = df.iloc[selected_idx - 1]
 
-        note = st.text_area("📝 Ghi chú", value=selected_row.get("Ghi chú", ""), height=100)
-        if st.button("💾 Lưu ghi chú"):
-            watchlist[selected_idx - 1]["Ghi chú"] = note
-            save_json_file(watchlist_file, watchlist)
-            st.success("✅ Đã lưu ghi chú.")
-
-        if st.button("📄 Xem chi tiết DN"):
-            details = fetch_company_details(selected_row["Link"])
-            with st.expander(f"📄 Chi tiết: {selected_row['Tên doanh nghiệp']}", expanded=True):
-                for k, v in details.items():
-                    st.markdown(f"**{k}**: {v}")
-
-        if st.button("🗑 Xoá doanh nghiệp"):
-            watchlist.pop(selected_idx - 1)
-            save_json_file(watchlist_file, watchlist)
-            st.success("✅ Đã xoá DN khỏi danh sách.")
-            st.rerun()
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            note = st.text_area("📝 Ghi chú", value=selected_row.get("Ghi chú", ""), key=f"note_{selected_idx}")
+            if st.button("💾 Lưu ghi chú"):
+                watchlist[selected_idx - 1]["Ghi chú"] = note
+                save_json_file(watchlist_file, watchlist)
+                st.success("✅ Đã lưu ghi chú.")
+        with col2:
+            if st.button("📄 Xem chi tiết"):
+                details = fetch_company_details(selected_row["Link"])
+                with st.expander(f"📄 Chi tiết: {selected_row['Tên doanh nghiệp']}", expanded=True):
+                    for k, v in details.items():
+                        st.markdown(f"**{k}**: {v}")
+        with col3:
+            if st.button("✏️ Sửa thông tin"):
+                new_name = st.text_input("🏢 Sửa tên DN", selected_row["Tên doanh nghiệp"])
+                new_mst = st.text_input("🆔 Sửa mã số thuế", selected_row["Mã số thuế"])
+                new_addr = st.text_input("📍 Sửa địa chỉ", selected_row["Địa chỉ"])
+                if st.button("💾 Lưu chỉnh sửa"):
+                    watchlist[selected_idx - 1]["Tên doanh nghiệp"] = new_name
+                    watchlist[selected_idx - 1]["Mã số thuế"] = new_mst
+                    watchlist[selected_idx - 1]["Địa chỉ"] = new_addr
+                    save_json_file(watchlist_file, watchlist)
+                    st.success("✅ Đã lưu chỉnh sửa.")
+                    st.rerun()
+        with col4:
+            if st.button("🗑 Xoá doanh nghiệp"):
+                watchlist.pop(selected_idx - 1)
+                save_json_file(watchlist_file, watchlist)
+                st.success("✅ Đã xoá khỏi danh sách.")
+                st.rerun()
     else:
         st.info("📭 Danh sách theo dõi trống.")
 
 def quan_ly_user_tab():
     st.header("👑 Quản lý người dùng")
     users = load_users()
+    st.subheader("📋 Danh sách user")
     st.table(pd.DataFrame(list(users.keys()), columns=["Tên đăng nhập"]))
 
     st.subheader("➕ Thêm user mới")
@@ -204,12 +227,24 @@ def quan_ly_user_tab():
             save_json_file(USERS_FILE, users)
             st.success(f"✅ Đã thêm user {new_user}.")
 
-    st.subheader("🔑 Reset mật khẩu")
-    target_user = st.selectbox("Chọn user", list(users.keys()))
-    if st.button("Reset mật khẩu về mặc định"):
-        users[target_user] = bcrypt.hashpw("123456".encode(), bcrypt.gensalt()).decode()
+    st.subheader("📂 Thêm user theo lô")
+    uploaded_file = st.file_uploader("Tải lên file Excel chứa danh sách user", type=["xlsx"])
+    if uploaded_file:
+        df_users = pd.read_excel(uploaded_file)
+        for _, row in df_users.iterrows():
+            username, password = row[0], row[1]
+            hashed_pw = bcrypt.hashpw(str(password).encode(), bcrypt.gensalt()).decode()
+            users[username] = hashed_pw
         save_json_file(USERS_FILE, users)
-        st.success(f"✅ Đã reset mật khẩu user {target_user} về 123456.")
+        st.success("✅ Đã thêm user theo lô.")
+
+    st.subheader("🔑 Reset mật khẩu user")
+    target_user = st.selectbox("Chọn user", list(users.keys()))
+    if st.button("Reset mật khẩu"):
+        new_hash = bcrypt.hashpw("123456".encode(), bcrypt.gensalt()).decode()
+        users[target_user] = new_hash
+        save_json_file(USERS_FILE, users)
+        st.success(f"✅ Đã reset mật khẩu user {target_user} về mặc định (123456).")
 
     st.subheader("🗑 Xoá user")
     user_to_delete = st.selectbox("Chọn user để xoá", [u for u in users if u != "admin"])
@@ -222,17 +257,19 @@ def quan_ly_user_tab():
 def huong_dan_tab():
     st.header("📖 Hướng dẫn sử dụng")
     st.markdown("""
-    ✅ **Tra cứu DN mới**: Bấm *Tra cứu* để lấy danh sách DN mới thành lập (update mỗi ngày).  
-    ✅ **Lọc theo tỉnh**: Dùng dropdown lọc theo tỉnh sau khi tra cứu.  
-    ✅ **Thêm vào theo dõi**: Chọn DN -> Bấm *Thêm vào theo dõi*.  
-    ✅ **Quản lý user**: Admin có thể thêm, xoá hoặc reset mật khẩu user.  
-    💡 *Danh sách DN mới được cập nhật liên tục, bạn nên vào lấy mỗi ngày.*
+    ✅ **Tra cứu doanh nghiệp:** Nhấn “Tra cứu 5 trang mới nhất” để lấy danh sách DN mới.  
+    ✅ **Lọc tỉnh:** Sau khi tra cứu, bạn có thể chọn tỉnh để lọc dữ liệu.  
+    ✅ **Theo dõi DN:** Chọn DN và nhấn “⭐ Thêm vào theo dõi” để lưu.  
+    ✅ **Quản lý user:** Thêm, xoá, reset mật khẩu user và thêm user theo lô từ Excel.  
+    ⚠️ **Lưu ý:** Danh sách KH mới được cập nhật liên tục, hãy tra cứu mỗi ngày để nắm bắt.  
     """)
-
 # ========== MAIN ==========
 def main_app():
     st.sidebar.title(f"Xin chào, {st.session_state['username']}")
-    pages = ["Tra cứu doanh nghiệp", "Theo dõi doanh nghiệp", "Quản lý người dùng", "Hướng dẫn"]
+    pages = ["Tra cứu doanh nghiệp", "Theo dõi doanh nghiệp"]
+    if st.session_state["username"] == "admin":
+        pages.append("Quản lý người dùng")
+    pages.append("Hướng dẫn")
     page = st.sidebar.radio("📂 Menu", pages)
 
     if page == "Tra cứu doanh nghiệp":
