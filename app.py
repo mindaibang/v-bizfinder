@@ -140,31 +140,32 @@ def tra_cuu_tab():
         df = st.session_state["search_results"]
         st.subheader("📋 Kết quả tìm kiếm")
 
-        # Ẩn cột Link
+        # Bỏ cột Link khỏi bảng hiển thị
         display_df = df.drop(columns=["Link"])
+        selected_index = st.selectbox(
+            "📌 Chọn dòng doanh nghiệp:",
+            display_df.index,
+            format_func=lambda x: display_df.loc[x, "Tên doanh nghiệp"]
+        )
+
         st.dataframe(display_df, use_container_width=True)
 
-        # Hiện menu 3 chấm cho từng dòng
-        for idx, row in df.iterrows():
-            menu = st.button(f"⋮ Menu #{idx}", key=f"menu_{idx}")
-            if menu:
-                selected = st.radio(
-                    "Chọn hành động:",
-                    ["📄 Xem chi tiết", "⭐ Thêm vào theo dõi"],
-                    key=f"action_{idx}"
-                )
-                if selected == "📄 Xem chi tiết":
-                    details = fetch_company_details(row["Link"])
-                    st.write(f"### 📄 Chi tiết: {row['Tên doanh nghiệp']}")
-                    st.json(details)
-                elif selected == "⭐ Thêm vào theo dõi":
-                    watchlist = load_json_file(WATCHLIST_FILE)
-                    if any(w['Link'] == row['Link'] for w in watchlist):
-                        st.info("✅ Doanh nghiệp đã trong danh sách theo dõi.")
-                    else:
-                        watchlist.append(row.to_dict())
-                        save_json_file(WATCHLIST_FILE, watchlist)
-                        st.success("✅ Đã thêm vào danh sách theo dõi.")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📄 Xem chi tiết"):
+                details = fetch_company_details(df.loc[selected_index, "Link"])
+                st.write(f"### 📄 Chi tiết: {df.loc[selected_index, 'Tên doanh nghiệp']}")
+                st.json(details)
+        with col2:
+            if st.button("⭐ Thêm vào theo dõi"):
+                watchlist = load_json_file(WATCHLIST_FILE)
+                selected_row = df.loc[selected_index].to_dict()
+                if any(w['Link'] == selected_row['Link'] for w in watchlist):
+                    st.info("✅ Doanh nghiệp đã trong danh sách theo dõi.")
+                else:
+                    watchlist.append(selected_row)
+                    save_json_file(WATCHLIST_FILE, watchlist)
+                    st.success("✅ Đã thêm vào danh sách theo dõi.")
 
 def theo_doi_tab():
     st.header("👁️ Theo dõi doanh nghiệp")
@@ -172,12 +173,9 @@ def theo_doi_tab():
     if watchlist:
         df = pd.DataFrame(watchlist).drop(columns=["Link"])
         st.dataframe(df, use_container_width=True)
-        for idx, row in df.iterrows():
-            if st.button(f"❌ Bỏ theo dõi #{idx}", key=f"unwatch_{idx}"):
-                watchlist = [w for w in watchlist if w['Link'] != row['Link']]
-                save_json_file(WATCHLIST_FILE, watchlist)
-                st.success("✅ Đã bỏ theo dõi.")
-                st.rerun()
+        if st.button("🗑 Xoá toàn bộ theo dõi"):
+            save_json_file(WATCHLIST_FILE, [])
+            st.success("✅ Đã xoá toàn bộ danh sách theo dõi.")
     else:
         st.info("📭 Danh sách theo dõi trống.")
 
