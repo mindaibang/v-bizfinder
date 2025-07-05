@@ -246,3 +246,4 @@ def main_app():
 if "logged_in" not in st.session_state:
     show_login()
 else:
+    main_app()
